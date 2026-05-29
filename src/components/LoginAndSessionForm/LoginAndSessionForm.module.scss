@@ -71,6 +71,11 @@
   letter-spacing: 0.07em;
 }
 
+.fieldDate {
+  max-width: 200px;
+  flex: 0 0 auto;
+}
+
 .input {
   height: var(--target-min);
   padding: 0 var(--space-3);

@@ -113,6 +113,11 @@
   letter-spacing: 0.07em;
 }
 
+.inputGroupDate {
+  max-width: 200px;
+  flex: 0 0 auto; // ← add this, stops it from stretching
+}
+
 .input {
   height: var(--target-sm);
   padding: 0 var(--space-3);

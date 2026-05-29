@@ -144,7 +144,9 @@ export default function PreviousWork({ session, header }: PreviousWorkProps) {
             <div className={styles.controlRow}>
               <div className={styles.controlLabel}>Date</div>
               <div className={styles.inputRow}>
-                <div className={styles.inputGroup}>
+                <div
+                  className={`${styles.inputGroup} ${styles.inputGroupDate}`}
+                >
                   <input
                     className={styles.input}
                     type="date"
