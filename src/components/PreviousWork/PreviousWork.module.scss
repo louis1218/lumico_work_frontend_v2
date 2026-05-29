@@ -48,6 +48,8 @@
   border-radius: var(--radius-sm);
   padding: 3px;
   gap: 2px;
+  width: fit-content; // ← add this
+  max-width: 100%; // ← add this
 }
 
 .segBtn {
@@ -62,6 +64,7 @@
   border: none;
   border-radius: calc(var(--radius-sm) - 2px);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background var(--duration-fast),
     color var(--duration-fast);
@@ -121,6 +124,8 @@
   font-family: inherit;
   outline: none;
   width: 100%;
+  min-width: 0; // ← add this
+  box-sizing: border-box; // ← add this
   transition:
     border-color var(--duration-fast),
     box-shadow var(--duration-fast);

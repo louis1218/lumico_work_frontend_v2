@@ -81,6 +81,8 @@
   font-size: var(--text-body);
   font-family: inherit;
   width: 100%;
+  min-width: 0; // ← add this
+  box-sizing: border-box; // ← add this
   outline: none;
   transition:
     border-color var(--duration-fast),

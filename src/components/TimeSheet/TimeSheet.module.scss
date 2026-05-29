@@ -149,6 +149,8 @@ details[open] .adminSummary::before {
   font-family: inherit;
   outline: none;
   width: 100%;
+  min-width: 0; // ← add this
+  box-sizing: border-box; // ← add this
   cursor: pointer;
   transition: border-color var(--duration-fast);
 
