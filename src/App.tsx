@@ -173,19 +173,6 @@ export default function App() {
   return (
     <Routes>
       {/* Menu — no Layout (full page, has its own header) */}
-      <Route
-        path="/menu"
-        element={
-          <Menu
-            session={session}
-            handleLogout={handleLogout}
-            logoutLoading={logoutLoading}
-            setLogoutLoading={setLogoutLoading}
-            setShowResetForm={setShowResetForm}
-            showResetForm={showResetForm}
-          />
-        }
-      />
 
       {/* Torque Job */}
       <Route
@@ -233,6 +220,19 @@ export default function App() {
       <Route
         path="/upload"
         element={withLayout(<ComingSoonInner name="Upload" />)}
+      />
+      <Route
+        path="/menu"
+        element={withLayout(
+          <Menu
+            session={session}
+            handleLogout={handleLogout}
+            logoutLoading={logoutLoading}
+            setLogoutLoading={setLogoutLoading}
+            setShowResetForm={setShowResetForm}
+            showResetForm={showResetForm}
+          />,
+        )}
       />
 
       <Route path="*" element={<Navigate to="/menu" replace />} />
