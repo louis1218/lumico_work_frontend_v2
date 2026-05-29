@@ -1,19 +1,16 @@
-import { useNavigate } from 'react-router-dom'
-import {
-  FaTasks, FaClipboardList,
-  FaChartLine, FaClock, FaBug, FaSignOutAlt
-} from 'react-icons/fa'
-import styles from './Menu.module.scss'
-import type { Session } from '../../App'
-import { FaWrench } from 'react-icons/fa'
+import { useNavigate } from "react-router-dom";
+import { FaChartLine, FaClock, FaSignOutAlt } from "react-icons/fa";
+import styles from "./Menu.module.scss";
+import type { Session } from "../../App";
+import { FaWrench } from "react-icons/fa";
 
 interface MenuProps {
-  session: Session
-  handleLogout: () => void
-  logoutLoading: boolean
-  setLogoutLoading: (v: boolean) => void
-  setShowResetForm: (v: boolean) => void
-  showResetForm?: boolean
+  session: Session;
+  handleLogout: () => void;
+  logoutLoading: boolean;
+  setLogoutLoading: (v: boolean) => void;
+  setShowResetForm: (v: boolean) => void;
+  showResetForm?: boolean;
 }
 
 export default function Menu({
@@ -21,22 +18,25 @@ export default function Menu({
   handleLogout,
   logoutLoading,
   setLogoutLoading,
-  setShowResetForm,
 }: MenuProps) {
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const handleLogoutClick = async () => {
-    setLogoutLoading(true)
-    await handleLogout()
-    setLogoutLoading(false)
-  }
+    setLogoutLoading(true);
+    await handleLogout();
+    setLogoutLoading(false);
+  };
 
   const loginTime = session.login_time
     ? new Date(session.login_time).toLocaleString(undefined, {
-        weekday: 'short', day: 'numeric', month: 'short',
-        hour: '2-digit', minute: '2-digit', hour12: true,
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
       })
-    : null
+    : null;
 
   return (
     <div className={styles.page}>
@@ -48,7 +48,13 @@ export default function Menu({
             Welcome, <span className={styles.name}>{session.name}</span>
           </h2>
           <p className={styles.loginTime}>
-            {loginTime ? <>Logged in at <strong>{loginTime}</strong></> : 'Logged in'}
+            {loginTime ? (
+              <>
+                Logged in at <strong>{loginTime}</strong>
+              </>
+            ) : (
+              "Logged in"
+            )}
           </p>
           <p className={styles.site}>{session.site} Solar Farm</p>
         </div>
@@ -67,10 +73,13 @@ export default function Menu({
             <span>Realignment</span>
           </button> */}
 
-          <button className={styles.card} onClick={() => navigate('/torque-job')}>
+          <button
+            className={styles.card}
+            onClick={() => navigate("/torque-job")}
+          >
             <FaWrench className={`${styles.icon} ${styles.amber}`} />
             <span>Torque Job</span>
-        </button>
+          </button>
         </div>
       </section>
 
@@ -78,11 +87,17 @@ export default function Menu({
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>Project Tools</h3>
         <div className={styles.grid}>
-          <button className={styles.card} onClick={() => navigate('/previous-work')}>
+          <button
+            className={styles.card}
+            onClick={() => navigate("/previous-work")}
+          >
             <FaChartLine className={`${styles.icon} ${styles.purple}`} />
             <span>Work Progress</span>
           </button>
-          <button className={styles.card} onClick={() => navigate('/timesheet')}>
+          <button
+            className={styles.card}
+            onClick={() => navigate("/timesheet")}
+          >
             <FaClock className={`${styles.icon} ${styles.blue}`} />
             <span>Timesheet</span>
           </button>
@@ -99,12 +114,9 @@ export default function Menu({
         onClick={handleLogoutClick}
         disabled={logoutLoading}
       >
-        {logoutLoading
-          ? <span className={styles.spinner} />
-          : <FaSignOutAlt />
-        }
-        {logoutLoading ? 'Logging out...' : 'Logout'}
+        {logoutLoading ? <span className={styles.spinner} /> : <FaSignOutAlt />}
+        {logoutLoading ? "Logging out..." : "Logout"}
       </button>
     </div>
-  )
+  );
 }

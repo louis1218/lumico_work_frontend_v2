@@ -72,20 +72,20 @@ function loadLoginUser(): LoginUser | null {
   return stored ? JSON.parse(stored) : null;
 }
 
-function ComingSoon({ name }: { name: string }) {
-  return (
-    <Layout session={null as any} onLogout={() => {}} logoutLoading={false}>
-      <div style={{ padding: "2rem", color: "var(--color-label)" }}>
-        <h2>{name}</h2>
-        <p
-          style={{ color: "var(--color-label-secondary)", marginTop: "0.5rem" }}
-        >
-          Coming soon — being rebuilt.
-        </p>
-      </div>
-    </Layout>
-  );
-}
+// function ComingSoon({ name }: { name: string }) {
+//   return (
+//     <Layout session={null as any} onLogout={() => {}} logoutLoading={false}>
+//       <div style={{ padding: "2rem", color: "var(--color-label)" }}>
+//         <h2>{name}</h2>
+//         <p
+//           style={{ color: "var(--color-label-secondary)", marginTop: "0.5rem" }}
+//         >
+//           Coming soon — being rebuilt.
+//         </p>
+//       </div>
+//     </Layout>
+//   );
+// }
 
 export default function App() {
   const navigate = useNavigate();
