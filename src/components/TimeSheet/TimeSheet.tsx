@@ -171,7 +171,7 @@ export default function TimeSheet({
 
       {/* Filters */}
       <div className={styles.filters}>
-        <div className={styles.filterGroup}>
+        <div className={styles.filterGroupfilterGroup}>
           <label className={styles.filterLabel}>User</label>
           <select
             className={styles.filterSelect}
@@ -189,7 +189,7 @@ export default function TimeSheet({
           </select>
         </div>
 
-        <div className={styles.filterGroup}>
+        <div className={`${styles.filterGroup} ${styles.filterGroupDate}`}>
           <label className={styles.filterLabel}>Date</label>
           <input
             className={styles.filterInput}

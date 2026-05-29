@@ -137,6 +137,11 @@ details[open] .adminSummary::before {
   letter-spacing: 0.07em;
 }
 
+.filterGroupDate {
+  max-width: 200px;
+  flex: 0 0 auto;
+}
+
 .filterSelect,
 .filterInput {
   height: var(--target-sm);
