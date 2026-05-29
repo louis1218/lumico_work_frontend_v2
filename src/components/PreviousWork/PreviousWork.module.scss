@@ -1,0 +1,324 @@
+.page {
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.headerWrap { margin-bottom: var(--space-2); }
+
+// ── Controls ──────────────────────────────────────────────
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.toggleGroup {
+  display: flex;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  width: fit-content;
+}
+
+.toggleBtn {
+  padding: 0 var(--space-4);
+  height: var(--target-sm);
+  font-size: var(--text-footnote);
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--color-label-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background var(--duration-fast), color var(--duration-fast);
+
+  &:hover { color: var(--color-label); }
+
+  &.active {
+    background: var(--color-tint);
+    color: var(--color-brand-text);
+    font-weight: 600;
+  }
+}
+
+.input {
+  height: var(--target-min);
+  padding: 0 var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  color: var(--color-label);
+  font-size: var(--text-body);
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  max-width: 320px;
+  transition: border-color var(--duration-fast);
+
+  &:focus { border-color: var(--color-tint); }
+}
+
+.blockTrackerRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+
+  .input { max-width: 200px; }
+}
+
+.searchBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--target-min);
+  padding: 0 var(--space-6);
+  background: var(--color-tint);
+  color: var(--color-brand-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  width: fit-content;
+  transition: opacity var(--duration-fast);
+
+  &:hover { opacity: 0.88; }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.btnSpinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: var(--color-brand-text);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+// ── Progress ──────────────────────────────────────────────
+.progressCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.progressHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progressLabel {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--color-label);
+}
+
+.progressCount {
+  font-size: var(--text-caption);
+  color: var(--color-label-secondary);
+}
+
+.progressBar {
+  height: 8px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-tint), var(--color-tint-hover, #d97706));
+  border-radius: var(--radius-full);
+  transition: width 0.4s var(--ease-standard);
+}
+
+.progressPct {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-tint);
+  text-align: right;
+}
+
+// ── Error / Empty ─────────────────────────────────────────
+.error {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-danger-fill);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-danger);
+  font-size: var(--text-footnote);
+}
+
+.empty {
+  text-align: center;
+  color: var(--color-label-tertiary);
+  font-size: var(--text-footnote);
+  padding: var(--space-10);
+  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+}
+
+// ── Log list ──────────────────────────────────────────────
+.logList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.logCard {
+  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.logHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-4);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--duration-fast);
+
+  &:hover { background: var(--color-hover); }
+}
+
+.logTitle {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--color-tint);
+  flex: 1;
+}
+
+.logMeta {
+  font-size: var(--text-caption);
+  color: var(--color-label-tertiary);
+}
+
+.chevron {
+  font-size: 10px;
+  color: var(--color-label-tertiary);
+}
+
+.logBody {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-top: 1px solid var(--color-separator);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.logRow {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-caption);
+}
+
+.indent { padding-left: var(--space-4); }
+
+.logKey {
+  color: var(--color-label-tertiary);
+  font-weight: 500;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.logVal {
+  color: var(--color-label-secondary);
+}
+
+// ── Task cards (PM) ───────────────────────────────────────
+.taskCard {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  margin-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.taskName {
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--color-label);
+}
+
+.taskMeta {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.taskDetails {
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-caption2);
+  color: var(--color-label-tertiary);
+}
+
+.taskNotes {
+  font-size: var(--text-caption);
+  color: var(--color-label-secondary);
+  font-style: italic;
+}
+
+.photoCount {
+  font-size: var(--text-caption2);
+  color: var(--color-label-tertiary);
+}
+
+// ── Tags ──────────────────────────────────────────────────
+.tagSuccess,
+.tagWarning,
+.tagDanger {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-caption2);
+  font-weight: 600;
+}
+
+.tagSuccess {
+  background: var(--color-success-fill);
+  color: var(--color-success);
+  border: 1px solid var(--color-success-border);
+}
+
+.tagWarning {
+  background: var(--color-warning-fill);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
+.tagDanger {
+  background: var(--color-danger-fill);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger-border);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

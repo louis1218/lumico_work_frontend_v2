@@ -1,0 +1,482 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.formWrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+// ── Top bar ───────────────────────────────────────────────
+.formTopBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-separator);
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ghostBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  height: var(--target-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator-2);
+  border-radius: var(--radius-full);
+  color: var(--color-info);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+  &:hover { background: var(--color-surface-3); }
+}
+
+.ghostBtnGreen {
+  @extend .ghostBtn;
+  color: var(--color-success);
+}
+
+// ── Step nav ──────────────────────────────────────────────
+.stepNav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  padding: var(--space-4) var(--space-4) 0;
+}
+
+.navArrow {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator-2);
+  border-radius: 50%;
+  font-size: 18px;
+  color: var(--color-info);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--duration-fast), opacity var(--duration-fast);
+  &:hover { background: var(--color-surface-3); }
+  &:disabled { opacity: 0.3; cursor: not-allowed; }
+}
+
+.stepLabel {
+  font-size: var(--text-subhead);
+  font-weight: 600;
+  color: var(--color-label);
+  white-space: nowrap;
+}
+
+// ── Form body ─────────────────────────────────────────────
+.form { padding: var(--space-4); }
+
+.stepBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.initStep {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 400px;
+}
+
+.stepTitle {
+  font-size: var(--text-title3);
+  font-weight: 600;
+  color: var(--color-label);
+  margin-bottom: var(--space-2);
+}
+
+// ── Fields ────────────────────────────────────────────────
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-caption2);
+  font-weight: 600;
+  color: var(--color-label-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.input, .select {
+  height: var(--target-min);
+  padding: 0 var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  color: var(--color-label);
+  font-size: var(--text-body);
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  &:focus { border-color: var(--color-tint); box-shadow: 0 0 0 3px var(--color-tint-fill); }
+}
+
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%2394a3b8' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+.textarea {
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  color: var(--color-label);
+  font-size: var(--text-body);
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  resize: vertical;
+  transition: border-color var(--duration-fast);
+  &:focus { border-color: var(--color-tint); }
+  &::placeholder { color: var(--color-label-tertiary); }
+}
+
+// ── Check / radio ─────────────────────────────────────────
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body);
+  color: var(--color-label);
+  cursor: pointer;
+  min-height: var(--target-sm);
+
+  input[type='checkbox'] { accent-color: var(--color-tint); }
+}
+
+.radioRow {
+  display: flex;
+  gap: var(--space-4);
+}
+
+.radioLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body);
+  color: var(--color-label);
+  cursor: pointer;
+  input { accent-color: var(--color-tint); }
+}
+
+.checkboxRow {
+  display: flex;
+  gap: var(--space-4);
+}
+
+// ── Task name ─────────────────────────────────────────────
+.taskNameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.taskTitle {
+  font-size: var(--text-subhead);
+  font-weight: 600;
+  color: var(--color-label);
+}
+
+.taskNameInput {
+  flex: 1;
+  min-width: 180px;
+  height: var(--target-sm);
+  padding: 0 var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-sm);
+  color: var(--color-label);
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  font-family: inherit;
+  outline: none;
+  &:focus { border-color: var(--color-tint); }
+}
+
+.deleteTaskBtn {
+  width: 28px; height: 28px;
+  background: var(--color-danger-fill);
+  border: 1px solid var(--color-danger-border);
+  border-radius: var(--radius-xs);
+  color: var(--color-danger);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: inherit;
+}
+
+.addMoreBtn {
+  padding: 0 var(--space-3);
+  height: var(--target-sm);
+  background: var(--color-info-fill);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-info);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+// ── Photos ────────────────────────────────────────────────
+.photoSection { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.photoSectionTitle {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--color-label);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.uploadedCount {
+  font-weight: 400;
+  color: var(--color-label-tertiary);
+  font-size: var(--text-caption);
+}
+
+.previewGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.previewThumb {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-separator-2);
+    cursor: zoom-in;
+  }
+}
+
+.savedTag {
+  position: absolute;
+  bottom: 3px; right: 3px;
+  font-size: 9px;
+  color: #fff;
+  background: rgba(0,0,0,0.65);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.removeBtn {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 18px; height: 18px;
+  background: var(--color-danger);
+  border: none; border-radius: 50%;
+  color: #fff; font-size: 12px; line-height: 18px;
+  text-align: center; cursor: pointer; padding: 0;
+  font-family: inherit;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.uploadBox {
+  width: 80px; height: 80px;
+  border: 2px dashed var(--color-separator-2);
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; color: var(--color-label-tertiary);
+  cursor: pointer;
+  transition: border-color var(--duration-fast), color var(--duration-fast);
+  &:hover { border-color: var(--color-tint); color: var(--color-tint); }
+}
+
+// ── Buttons ───────────────────────────────────────────────
+.primaryBtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  height: var(--target-min);
+  padding: 0 var(--space-6);
+  background: var(--color-tint); color: var(--color-brand-text);
+  border: none; border-radius: var(--radius-sm);
+  font-size: var(--text-body); font-weight: 600; font-family: inherit;
+  cursor: pointer;
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
+  &:hover { opacity: 0.88; }
+  &:active { transform: scale(0.99); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+.secondaryBtn {
+  @extend .primaryBtn;
+  background: var(--color-surface-2);
+  color: var(--color-label);
+  border: 1px solid var(--color-separator-2);
+  &:hover { background: var(--color-surface-3); opacity: 1; }
+}
+
+.fullWidth { width: 100%; }
+
+.btnSpinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: var(--color-brand-text);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+// ── Summary ───────────────────────────────────────────────
+.summaryTitle {
+  font-size: var(--text-title3);
+  font-weight: 600;
+  color: var(--color-label);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-separator);
+}
+
+.summaryList {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  max-height: 420px; overflow-y: auto;
+}
+
+.summaryCard {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+
+.summaryCardHeader {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2);
+}
+
+.summaryCardNum {
+  font-size: var(--text-caption2);
+  color: var(--color-label-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summaryCardName {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--color-label);
+}
+
+.summaryCardActions {
+  display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0;
+}
+
+.editBtn {
+  padding: 0 var(--space-2);
+  height: 22px;
+  background: var(--color-info-fill);
+  border: 1px solid var(--color-info-border);
+  border-radius: var(--radius-xs);
+  color: var(--color-info);
+  font-size: var(--text-caption2);
+  font-weight: 600; font-family: inherit; cursor: pointer;
+}
+
+.statusBadge {
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-caption2);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.submitted { background: var(--color-success-fill); color: var(--color-success); border: 1px solid var(--color-success-border); }
+.saved     { background: var(--color-warning-fill); color: var(--color-warning); border: 1px solid var(--color-warning-border); }
+.notSaved  { background: var(--color-hover); color: var(--color-label-secondary); border: 1px solid var(--color-separator); }
+
+.statusText { font-size: var(--text-caption); font-weight: 500; }
+.statusGreen { color: var(--color-success); }
+.statusRed   { color: var(--color-danger); }
+
+.summaryDetail { font-size: var(--text-caption); color: var(--color-label-secondary); }
+
+.photoRow { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+
+.thumbSmall {
+  width: 40px; height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-separator-2);
+  cursor: zoom-in;
+}
+
+.summaryNotes {
+  font-size: var(--text-caption);
+  color: var(--color-label-tertiary);
+  font-style: italic;
+}
+
+.finalActions {
+  display: flex; justify-content: space-between; gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.required { color: var(--color-danger); }
+
+// ── Overlays ──────────────────────────────────────────────
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+
+.overlaySpinner {
+  width: 48px; height: 48px;
+  border: 4px solid rgba(255,255,255,0.2);
+  border-top-color: var(--color-tint);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.lightbox {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.88);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; cursor: zoom-out;
+}
+
+.lightboxImg {
+  max-width: 92%; max-height: 92%;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-modal);
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
