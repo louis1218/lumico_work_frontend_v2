@@ -69,10 +69,10 @@ export default function LoginAndSessionForm({ onComplete }: LoginAndSessionFormP
     <div className={styles.page}>
       <div className={styles.card}>
         <div className={styles.logoWrap}>
-          <img src="/lumico-smalllogo.jpg" alt="Lumico" className={styles.logo} />
+          <img src="/lumico-logo-clear.png" alt="Lumico" className={styles.logo} />
           <div>
-            <div className={styles.logoName}>Lumico</div>
-            <div className={styles.logoSub}>Electricals Pty Ltd</div>
+            {/* <div className={styles.logoName}>Lumico</div>
+            <div className={styles.logoSub}>Electricals Pty Ltd</div> */}
           </div>
         </div>
 

@@ -57,7 +57,9 @@
   font-family: inherit;
   outline: none;
   width: 100%;
-  transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+  transition:
+    border-color var(--duration-fast),
+    box-shadow var(--duration-fast);
 
   &:focus {
     border-color: var(--color-tint);
@@ -96,9 +98,14 @@
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
 
-  &:hover { background: var(--color-surface-3); color: var(--color-label); }
+  &:hover {
+    background: var(--color-surface-3);
+    color: var(--color-label);
+  }
 }
 
 .trackerInfo {
@@ -206,7 +213,7 @@
   transition: background var(--duration-base);
 
   &::before {
-    content: '';
+    content: "";
     position: absolute;
     width: 20px;
     height: 20px;
@@ -236,12 +243,19 @@
   flex-shrink: 0;
   transition: border-color var(--duration-fast);
 
-  &:focus { border-color: var(--color-tint); }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:focus {
+    border-color: var(--color-tint);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 
   // Hide number spinners
   &::-webkit-outer-spin-button,
-  &::-webkit-inner-spin-button { -webkit-appearance: none; }
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+  }
   -moz-appearance: textfield;
 }
 
@@ -303,21 +317,24 @@
 
 .removeBtn {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -6px;
+  right: -6px;
   width: 20px;
   height: 20px;
+  min-height: unset; // ← add this
   background: var(--color-danger);
-  border: none;
-  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  border-radius: 50% !important;
   color: #fff;
-  font-size: 13px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
   font-family: inherit;
+  box-shadow: var(--shadow-sm);
+  line-height: 1;
 }
 
 .addPhotoBtn {
@@ -331,11 +348,16 @@
   justify-content: center;
   gap: 4px;
   cursor: pointer;
-  transition: border-color var(--duration-fast), color var(--duration-fast);
+  transition:
+    border-color var(--duration-fast),
+    color var(--duration-fast);
 
   &:hover {
     border-color: var(--color-tint);
-    .addIcon, .addLabel { color: var(--color-tint); }
+    .addIcon,
+    .addLabel {
+      color: var(--color-tint);
+    }
   }
 }
 
@@ -365,9 +387,16 @@
   resize: vertical;
   transition: border-color var(--duration-fast);
 
-  &:focus { border-color: var(--color-tint); }
-  &::placeholder { color: var(--color-label-tertiary); }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:focus {
+    border-color: var(--color-tint);
+  }
+  &::placeholder {
+    color: var(--color-label-tertiary);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 // ── Actions ───────────────────────────────────────────────
@@ -397,8 +426,13 @@
   cursor: pointer;
   transition: background var(--duration-fast);
 
-  &:hover { background: var(--color-surface-3); }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:hover {
+    background: var(--color-surface-3);
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .submitBtn {
@@ -418,8 +452,13 @@
   cursor: pointer;
   transition: opacity var(--duration-fast);
 
-  &:hover { opacity: 0.88; }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:hover {
+    opacity: 0.88;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .primaryBtn {
@@ -439,8 +478,13 @@
   cursor: pointer;
   transition: opacity var(--duration-fast);
 
-  &:hover { opacity: 0.88; }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:hover {
+    opacity: 0.88;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .submittedBanner {
@@ -504,5 +548,7 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }

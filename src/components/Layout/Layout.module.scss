@@ -25,30 +25,31 @@
 
 .sidebarLogo {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-4) var(--space-4);
+  padding: var(--space-4);
   border-bottom: 1px solid var(--color-separator);
   flex-shrink: 0;
+  gap: var(--space-2);
 }
 
 .logoImg {
-  width: 32px;
-  height: 32px;
+  width: 200px;
+  height: auto;
   object-fit: contain;
-  border-radius: var(--radius-xs);
 }
 
 .logoName {
   font-size: var(--text-footnote);
   font-weight: 600;
   color: var(--color-label);
-  line-height: 1.2;
+  text-align: center;
 }
 
 .logoSub {
-  font-size: var(--text-caption2);
-  color: var(--color-label-tertiary);
+  font-size: var(--text-caption);
+  color: var(--color-label-secondary);
+  text-align: center;
 }
 
 // ── Nav ───────────────────────────────────────────────────
@@ -85,7 +86,9 @@
   cursor: pointer;
   text-align: left;
   min-height: var(--target-sm);
-  transition: background var(--duration-fast), color var(--duration-fast);
+  transition:
+    background var(--duration-fast),
+    color var(--duration-fast);
 
   &:hover {
     background: var(--color-hover);
@@ -165,8 +168,13 @@
   cursor: pointer;
   transition: opacity var(--duration-fast);
 
-  &:hover { opacity: 0.85; }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:hover {
+    opacity: 0.85;
+  }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .spinner {
@@ -226,7 +234,9 @@
   min-height: var(--target-min);
   transition: color var(--duration-fast);
 
-  &:hover { color: var(--color-label-secondary); }
+  &:hover {
+    color: var(--color-label-secondary);
+  }
 
   &.tabActive {
     color: var(--color-tint);
@@ -246,5 +256,7 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -6,7 +6,9 @@
   gap: var(--space-5);
 }
 
-.headerWrap { margin-bottom: var(--space-2); }
+.headerWrap {
+  margin-bottom: var(--space-2);
+}
 
 // ── Admin panel ───────────────────────────────────────────
 .adminPanel {
@@ -25,11 +27,19 @@
   user-select: none;
   list-style: none;
 
-  &::-webkit-details-marker { display: none; }
-  &::before { content: '▶ '; font-size: 10px; color: var(--color-label-tertiary); }
+  &::-webkit-details-marker {
+    display: none;
+  }
+  &::before {
+    content: "▶ ";
+    font-size: 10px;
+    color: var(--color-label-tertiary);
+  }
 }
 
-details[open] .adminSummary::before { content: '▼ '; }
+details[open] .adminSummary::before {
+  content: "▼ ";
+}
 
 .adminGrid {
   display: grid;
@@ -73,7 +83,10 @@ details[open] .adminSummary::before { content: '▼ '; }
   justify-content: center;
   transition: opacity var(--duration-fast);
 
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 }
 
 .signIn {
@@ -139,7 +152,9 @@ details[open] .adminSummary::before { content: '▼ '; }
   cursor: pointer;
   transition: border-color var(--duration-fast);
 
-  &:focus { border-color: var(--color-tint); }
+  &:focus {
+    border-color: var(--color-tint);
+  }
 }
 
 .filterSelect {
@@ -150,7 +165,7 @@ details[open] .adminSummary::before { content: '▼ '; }
   padding-right: 28px;
 }
 
-// ── Table ─────────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────
 .empty {
   text-align: center;
   color: var(--color-label-tertiary);
@@ -161,6 +176,7 @@ details[open] .adminSummary::before { content: '▼ '; }
   border-radius: var(--radius-md);
 }
 
+// ── Table (desktop) ───────────────────────────────────────
 .tableWrap {
   overflow-x: auto;
   background: var(--color-surface);
@@ -192,7 +208,9 @@ details[open] .adminSummary::before { content: '▼ '; }
     border-bottom: 1px solid var(--color-separator);
   }
 
-  tr:last-child td { border-bottom: none; }
+  tr:last-child td {
+    border-bottom: none;
+  }
 
   tr:hover td {
     background: var(--color-hover);
@@ -200,8 +218,111 @@ details[open] .adminSummary::before { content: '▼ '; }
   }
 }
 
-.capitalize { text-transform: capitalize; }
+.capitalize {
+  text-transform: capitalize;
+}
+
+// ── Card list (mobile) ────────────────────────────────────
+.cardList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cardName {
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--color-label);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cardSite {
+  font-size: var(--text-caption2);
+  font-weight: 600;
+  color: var(--color-label-tertiary);
+  text-transform: capitalize;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator);
+  border-radius: var(--radius-xs);
+  padding: 2px var(--space-2);
+  flex-shrink: 0;
+}
+
+.cardTimes {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.cardTimeBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.cardTimeLabel {
+  font-size: var(--text-caption2);
+  font-weight: 600;
+  color: var(--color-label-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cardTimeValue {
+  font-size: var(--text-footnote);
+  color: var(--color-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardDate {
+  font-size: var(--text-caption2);
+  color: var(--color-label-tertiary);
+}
+
+// ── Responsive: show cards on mobile, table on desktop ────
+@media (min-width: 600px) {
+  .cardList {
+    display: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .tableWrap {
+    display: none;
+  }
+  .cardList {
+    display: flex;
+  }
+
+  .filters {
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+}
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }

@@ -42,7 +42,7 @@ export default function Menu({
     <div className={styles.page}>
       {/* ── Header ── */}
       <div className={styles.header}>
-        <img src="/lumico-smalllogo.jpg" alt="Lumico" className={styles.logo} />
+        {/* <img src="/lumico-smalllogo.jpg" alt="Lumico" className={styles.logo} /> */}
         <div className={styles.headerText}>
           <h2 className={styles.welcome}>
             Welcome, <span className={styles.name}>{session.name}</span>
@@ -58,14 +58,14 @@ export default function Menu({
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>Task Logs</h3>
         <div className={styles.grid}>
-          <button className={styles.card} onClick={() => navigate('/multisteptaskform')}>
+          {/* <button className={styles.card} onClick={() => navigate('/multisteptaskform')}>
             <FaTasks className={`${styles.icon} ${styles.amber}`} />
             <span>PM Tasks</span>
-          </button>
-          <button className={styles.card} onClick={() => navigate('/realignmentform')}>
+          </button> */}
+          {/* <button className={styles.card} onClick={() => navigate('/realignmentform')}>
             <FaClipboardList className={`${styles.icon} ${styles.blue}`} />
             <span>Realignment</span>
-          </button>
+          </button> */}
 
           <button className={styles.card} onClick={() => navigate('/torque-job')}>
             <FaWrench className={`${styles.icon} ${styles.amber}`} />
@@ -86,10 +86,10 @@ export default function Menu({
             <FaClock className={`${styles.icon} ${styles.blue}`} />
             <span>Timesheet</span>
           </button>
-          <button className={styles.card} onClick={() => navigate('/report')}>
+          {/* <button className={styles.card} onClick={() => navigate('/report')}>
             <FaBug className={`${styles.icon} ${styles.red}`} />
             <span>Report</span>
-          </button>
+          </button> */}
         </div>
       </section>
 
