@@ -15,7 +15,7 @@ interface TimeSheetProps {
   header: React.ReactNode;
 }
 
-const ADMIN_USERS = ["jasonzhou", "louisli"];
+const ADMIN_USERS = ["jasonzhou", "louisli", "francisdiao", "zhichangzhou"];
 const HIDDEN_USERS = ["louisli", "francisdiao", "zhichangzhou", "bobportman"];
 const HIDDEN_FROM_TABLE = ["louisli", "francisdiao", "zhichangzhou"];
 
