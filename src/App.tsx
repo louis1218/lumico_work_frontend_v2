@@ -7,6 +7,9 @@ import TimeSheet from "./components/TimeSheet/TimeSheet";
 import PreviousWork from "./components/PreviousWork/PreviousWork";
 import TorqueJobForm from "./components/TorqueJobForm/TorqueJobForm";
 import Layout from "./components/Layout/Layout";
+import Inspection from "./components/Inspection/Inspection";
+import Reports from "./components/Reports/Reports";
+import { api, apiFetch, SESSION_EXPIRED_EVENT } from "./api";
 
 // ── Types ─────────────────────────────────────────────────
 export interface Session {
@@ -14,6 +17,7 @@ export interface Session {
   date: string;
   name: string;
   session_id: string;
+  session_token?: string;
   login_time: string;
   username: string;
   role: string;
@@ -98,13 +102,25 @@ export default function App() {
 
   useEffect(() => {
     if (session?.role !== "admin") return;
-    fetch(
-      "https://qse4hcpeq2.execute-api.ap-southeast-2.amazonaws.com/default/getUserList",
+    apiFetch(
+      api("/users"),
     )
       .then((res) => res.json())
       .then((data) => setAllUsers(data))
       .catch((err) => console.error("Failed to fetch user list:", err));
   }, [session]);
+
+  // Any API call that comes back 401 means the login is no longer valid
+  useEffect(() => {
+    const expire = () => {
+      localStorage.clear();
+      setSession(null);
+      setLoginUser(null);
+      navigate("/login");
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, expire);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expire);
+  }, [navigate]);
 
   const handleLogout = async () => {
     setLogoutLoading(true);
@@ -113,8 +129,8 @@ export default function App() {
       if (stored) {
         const s: Session = JSON.parse(stored);
         if (s.session_id) {
-          await fetch(
-            "https://wxffaf19t7.execute-api.ap-southeast-2.amazonaws.com/prod/siteLogout",
+          await apiFetch(
+            api("/auth/logout"),
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -174,7 +190,11 @@ export default function App() {
     <Routes>
       {/* Menu — no Layout (full page, has its own header) */}
 
-      {/* Torque Job */}
+      {/* Inspection (main feature) */}
+      <Route path="/inspect" element={withLayout(<Inspection session={session} />)} />
+      {session.role === "admin" && <Route path="/reports" element={withLayout(<Reports />)} />}
+
+      {/* Torque Job: kept in the code, hidden from the menus */}
       <Route
         path="/torque-job"
         element={withLayout(

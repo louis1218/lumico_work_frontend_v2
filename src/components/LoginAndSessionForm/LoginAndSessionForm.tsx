@@ -1,6 +1,7 @@
 import { useState } from "react";
 import styles from "./LoginAndSessionForm.module.scss";
 import type { Session } from "../../App";
+import { api } from "../../api";
 
 interface LoginAndSessionFormProps {
   onComplete: (session: Session) => void;
@@ -36,7 +37,7 @@ export default function LoginAndSessionForm({
     setLoading(true);
     try {
       const res = await fetch(
-        "https://3tjb71iip9.execute-api.ap-southeast-2.amazonaws.com/prod/SiteLogin",
+        api("/auth/login"),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -49,7 +50,7 @@ export default function LoginAndSessionForm({
         return;
       }
 
-      const { session_id, first_name, last_name, login_time, role } = data;
+      const { session_id, session_token, first_name, last_name, login_time, role } = data;
       const name = `${first_name} ${last_name}`;
       const expiresAt = Date.now() + 1000 * 60 * 60 * 12;
 
@@ -58,6 +59,7 @@ export default function LoginAndSessionForm({
         date,
         name,
         session_id,
+        session_token,
         login_time,
         username,
         role,

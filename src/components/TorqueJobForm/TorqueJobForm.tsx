@@ -10,11 +10,12 @@ import {
 } from "react-icons/fa";
 import styles from "./TorqueJobForm.module.scss";
 import type { Session } from "../../App";
+import { api, apiFetch } from "../../api";
 
 const GET_API =
-  "https://62qd6uo4j4.execute-api.ap-southeast-2.amazonaws.com/default/getWorkLogSharedEditSession";
+  api("/sessions/upload/get");
 const POST_API =
-  "https://6iswohbvrg.execute-api.ap-southeast-2.amazonaws.com/default/WorkLogSharedEditSession";
+  api("/sessions/upload");
 const S3_BASE = "https://solar-farm-uploads.s3.ap-southeast-2.amazonaws.com";
 
 interface TorqueJobFormProps {
@@ -63,7 +64,7 @@ export default function TorqueJobForm({
   const fetchSession = async (b: string, t: string) => {
     setIsFetching(true);
     try {
-      const res = await fetch(GET_API, {
+      const res = await apiFetch(GET_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -112,8 +113,8 @@ export default function TorqueJobForm({
     const sanitized = trackerId.replace(/\s+/g, "_").toLowerCase();
     for (const [i, photo] of newPhotos.entries()) {
       const fileName = `${sanitized}_torque_${timestamp}_${i + 1}`;
-      const res = await fetch(
-        `https://3ffk7ivyul.execute-api.ap-southeast-2.amazonaws.com/prod/getPresignedURL-1?project=${project}&mode=before&filename=${fileName}&contentType=${photo.type}`,
+      const res = await apiFetch(
+        `${api("/uploads/presign")}?${new URLSearchParams({ project, mode: "before", filename: fileName, contentType: photo.type })}`,
         { method: "GET" },
       );
       if (!res.ok) throw new Error("Failed to get presigned URL");
@@ -170,7 +171,7 @@ export default function TorqueJobForm({
         },
       ];
 
-      const res = await fetch(POST_API, {
+      const res = await apiFetch(POST_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

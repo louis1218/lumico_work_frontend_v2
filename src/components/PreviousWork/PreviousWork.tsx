@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FaSearch } from "react-icons/fa";
 import styles from "./PreviousWork.module.scss";
 import type { Session } from "../../App";
+import { api, apiFetch } from "../../api";
 
 interface TaskEntry {
   task_name: string;
@@ -62,8 +63,8 @@ export default function PreviousWork({ session, header }: PreviousWorkProps) {
           site: session.site.toLowerCase(),
           // no date filter = all records
         });
-        const res = await fetch(
-          `https://yeyhsz0wrg.execute-api.ap-southeast-2.amazonaws.com/default/getUserWorkLog?${query}`,
+        const res = await apiFetch(
+          `${api("/work-logs")}?${query}`,
         );
         const data = await res.json();
         if (res.ok) {
@@ -94,8 +95,8 @@ export default function PreviousWork({ session, header }: PreviousWorkProps) {
           ? { tracker_id: selectedTrackerId }
           : {}),
       });
-      const res = await fetch(
-        `https://yeyhsz0wrg.execute-api.ap-southeast-2.amazonaws.com/default/getUserWorkLog?${query}`,
+      const res = await apiFetch(
+        `${api("/work-logs")}?${query}`,
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || "Failed to fetch");

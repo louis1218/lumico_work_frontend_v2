@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaChartLine, FaClock, FaSignOutAlt } from "react-icons/fa";
+import { FaChartBar, FaChevronRight, FaClock, FaSignOutAlt, FaSolarPanel } from "react-icons/fa";
 import styles from "./Menu.module.scss";
 import type { Session } from "../../App";
-import { FaWrench } from "react-icons/fa";
+import { apiJson } from "../../api";
+import { localDate, longDate } from "../../lib/inspection";
 
 interface MenuProps {
   session: Session;
@@ -13,109 +15,79 @@ interface MenuProps {
   showResetForm?: boolean;
 }
 
-export default function Menu({
-  session,
-  handleLogout,
-  logoutLoading,
-  setLogoutLoading,
-}: MenuProps) {
-  const navigate = useNavigate();
+interface Mine {
+  trackers_checked: number;
+  issues: number;
+  broken_panels: number;
+}
 
-  const handleLogoutClick = async () => {
+export default function Menu({ session, handleLogout, logoutLoading, setLogoutLoading }: MenuProps) {
+  const navigate = useNavigate();
+  const [mine, setMine] = useState<Mine | null>(null);
+  const today = localDate();
+  const first = session.name.split(" ")[0] || session.name;
+
+  useEffect(() => {
+    apiJson<Mine>(`/inspections/mine?${new URLSearchParams({ site: session.site.toLowerCase(), work_date: today })}`)
+      .then(setMine)
+      .catch(() => {});
+  }, [session.site, today]);
+
+  const logout = async () => {
     setLogoutLoading(true);
     await handleLogout();
     setLogoutLoading(false);
   };
 
-  const loginTime = session.login_time
-    ? new Date(session.login_time).toLocaleString(undefined, {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      })
-    : null;
-
   return (
     <div className={styles.page}>
-      {/* ── Header ── */}
-      <div className={styles.header}>
-        {/* <img src="/lumico-smalllogo.jpg" alt="Lumico" className={styles.logo} /> */}
-        <div className={styles.headerText}>
-          <h2 className={styles.welcome}>
-            Welcome, <span className={styles.name}>{session.name}</span>
-          </h2>
-          <p className={styles.loginTime}>
-            {loginTime ? (
-              <>
-                Logged in at <strong>{loginTime}</strong>
-              </>
-            ) : (
-              "Logged in"
-            )}
-          </p>
-          <p className={styles.site}>{session.site} Solar Farm</p>
+      <header className={styles.header}>
+        <h1 className={styles.welcome}>
+          Hello, <span className={styles.name}>{first}</span>
+        </h1>
+        <p className={styles.site}>
+          {session.site} solar farm, {longDate(today)}
+        </p>
+      </header>
+
+      <button className={styles.cta} onClick={() => navigate("/inspect")}>
+        <FaSolarPanel aria-hidden="true" className={styles.ctaIcon} />
+        <span>
+          <strong>Inspect trackers</strong>
+          <em>Pick a block and tracker, record broken panels, add photos</em>
+        </span>
+        <FaChevronRight aria-hidden="true" />
+      </button>
+
+      <section className={styles.today} aria-label="Your day so far">
+        <div>
+          <strong>{mine?.trackers_checked ?? "–"}</strong>
+          <span>trackers checked</span>
         </div>
-      </div>
-
-      {/* ── Task Logs ── */}
-      <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Task Logs</h3>
-        <div className={styles.grid}>
-          {/* <button className={styles.card} onClick={() => navigate('/multisteptaskform')}>
-            <FaTasks className={`${styles.icon} ${styles.amber}`} />
-            <span>PM Tasks</span>
-          </button> */}
-          {/* <button className={styles.card} onClick={() => navigate('/realignmentform')}>
-            <FaClipboardList className={`${styles.icon} ${styles.blue}`} />
-            <span>Realignment</span>
-          </button> */}
-
-          <button
-            className={styles.card}
-            onClick={() => navigate("/torque-job")}
-          >
-            <FaWrench className={`${styles.icon} ${styles.amber}`} />
-            <span>Torque Job</span>
-          </button>
+        <div>
+          <strong>{mine?.issues ?? "–"}</strong>
+          <span>with issues</span>
+        </div>
+        <div>
+          <strong>{mine?.broken_panels ?? "–"}</strong>
+          <span>broken panels</span>
         </div>
       </section>
 
-      {/* ── Project Tools ── */}
-      <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Project Tools</h3>
-        <div className={styles.grid}>
-          <button
-            className={styles.card}
-            onClick={() => navigate("/previous-work")}
-          >
-            <FaChartLine className={`${styles.icon} ${styles.purple}`} />
-            <span>Work Progress</span>
+      <nav className={styles.links} aria-label="Other tools">
+        <button onClick={() => navigate("/timesheet")}>
+          <FaClock aria-hidden="true" /> Timesheet <FaChevronRight aria-hidden="true" />
+        </button>
+        {session.role === "admin" && (
+          <button onClick={() => navigate("/reports")}>
+            <FaChartBar aria-hidden="true" /> Reports and staff progress <FaChevronRight aria-hidden="true" />
           </button>
-          <button
-            className={styles.card}
-            onClick={() => navigate("/timesheet")}
-          >
-            <FaClock className={`${styles.icon} ${styles.blue}`} />
-            <span>Timesheet</span>
-          </button>
-          {/* <button className={styles.card} onClick={() => navigate('/report')}>
-            <FaBug className={`${styles.icon} ${styles.red}`} />
-            <span>Report</span>
-          </button> */}
-        </div>
-      </section>
+        )}
+      </nav>
 
-      {/* ── Logout ── */}
-      <button
-        className={styles.logoutBtn}
-        onClick={handleLogoutClick}
-        disabled={logoutLoading}
-      >
-        {logoutLoading ? <span className={styles.spinner} /> : <FaSignOutAlt />}
-        {logoutLoading ? "Logging out..." : "Logout"}
+      <button className={styles.logoutBtn} onClick={logout} disabled={logoutLoading}>
+        {logoutLoading ? <span className={styles.spinner} /> : <FaSignOutAlt aria-hidden="true" />}
+        {logoutLoading ? "Logging out…" : "Log out"}
       </button>
     </div>
   );

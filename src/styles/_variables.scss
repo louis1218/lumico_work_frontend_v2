@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap");
 
 :root {
   // ─────────────────────────────────────────────────────
@@ -93,7 +93,7 @@
   // ─────────────────────────────────────────────────────
   // TYPOGRAPHY
   // ─────────────────────────────────────────────────────
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Barlow", system-ui, -apple-system, sans-serif;
 
   --text-caption2: 10px;
   --text-caption: 12px;
@@ -103,6 +103,10 @@
   --text-title3: 18px;
   --text-title2: 22px;
   --text-title1: 28px;
+
+  // Field screens are used outdoors in glare: bigger type, bigger targets
+  --text-field: 17px;
+  --target-field: 52px;
 
   // ─────────────────────────────────────────────────────
   // TOUCH TARGETS

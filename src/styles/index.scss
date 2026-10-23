@@ -20,6 +20,7 @@ body {
   font-family: var(--font-sans);
   font-size: var(--text-footnote);
   line-height: 1.6;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -296,5 +297,42 @@ input[type="radio"] {
     background: var(--color-hover);
     color: var(--color-label-secondary);
     border: 1px solid var(--color-separator);
+  }
+}
+
+
+// ── Print (Save as PDF): light theme, no navigation ──────────────────────────
+@media print {
+  :root {
+    --color-bg: #fff;
+    --color-surface: #fff;
+    --color-surface-2: #f4f5f7;
+    --color-surface-3: #e9ebef;
+    --color-label: #111827;
+    --color-label-secondary: #374151;
+    --color-label-tertiary: #6b7280;
+    --color-separator: #d1d5db;
+    --color-separator-2: #c4c9d1;
+    --color-tint: #b45309;
+    --color-tint-fill: #fef3c7;
+    --color-success: #15803d;
+    --color-success-fill: #dcfce7;
+    --color-success-border: #86efac;
+    --color-danger: #b91c1c;
+    --color-danger-fill: #fee2e2;
+    --color-danger-border: #fca5a5;
+  }
+  body {
+    background: #fff;
+  }
+  [data-print="hide"] {
+    display: none !important;
+  }
+  [data-print="main"] {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  @page {
+    margin: 14mm;
   }
 }

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import FormHeader from "../FormHeader/FormHeader";
 import styles from "./MultiStepTaskForm.module.scss";
 import type { Session } from "../../App";
+import { api, apiFetch } from "../../api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TaskState {
@@ -63,9 +64,9 @@ interface MultiStepTaskFormProps {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GET_SESSION_API =
-  "https://62qd6uo4j4.execute-api.ap-southeast-2.amazonaws.com/default/getWorkLogSharedEditSession";
+  api("/sessions/upload/get");
 const POST_SESSION_API =
-  "https://6iswohbvrg.execute-api.ap-southeast-2.amazonaws.com/default/WorkLogSharedEditSession";
+  api("/sessions/upload");
 const S3_BASE_URL =
   "https://solar-farm-uploads.s3.ap-southeast-2.amazonaws.com";
 
@@ -198,7 +199,7 @@ export default function MultiStepTaskForm({
   const fetchSessionData = async () => {
     setIsFetching(true);
     try {
-      const res = await fetch(GET_SESSION_API, {
+      const res = await apiFetch(GET_SESSION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -354,8 +355,8 @@ export default function MultiStepTaskForm({
       const fileName = taskName
         ? `${sanitizedTracker}_${type}_${sanitizedTask}_${timestamp}_${i + 1}`
         : `${sanitizedTracker}_realignment_${type}_${timestamp}_${i + 1}`;
-      const res = await fetch(
-        `https://3ffk7ivyul.execute-api.ap-southeast-2.amazonaws.com/prod/getPresignedURL-1?project=${project}&mode=${type}&filename=${fileName}&contentType=${photo.type}`,
+      const res = await apiFetch(
+        `${api("/uploads/presign")}?${new URLSearchParams({ project, mode: type, filename: fileName, contentType: photo.type })}`,
         { method: "GET" },
       );
       if (!res.ok) throw new Error("Failed presigned URL");
@@ -465,7 +466,7 @@ export default function MultiStepTaskForm({
         notes: task.notes || "",
       };
 
-      const res = await fetch(POST_SESSION_API, {
+      const res = await apiFetch(POST_SESSION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -554,7 +555,7 @@ export default function MultiStepTaskForm({
             : "Realignment request photos"),
       };
 
-      const res = await fetch(POST_SESSION_API, {
+      const res = await apiFetch(POST_SESSION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -661,7 +662,7 @@ export default function MultiStepTaskForm({
           })),
         ],
       };
-      const res = await fetch(POST_SESSION_API, {
+      const res = await apiFetch(POST_SESSION_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

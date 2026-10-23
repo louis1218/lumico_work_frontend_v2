@@ -1,12 +1,6 @@
 import { type ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  FaWrench,
-  FaChartLine,
-  FaClock,
-  FaHome,
-  FaSignOutAlt,
-} from "react-icons/fa";
+import { FaChartBar, FaClock, FaHome, FaSignOutAlt, FaSolarPanel } from "react-icons/fa";
 import styles from "./Layout.module.scss";
 import type { Session } from "../../App";
 
@@ -15,34 +9,15 @@ interface NavItem {
   path: string;
   icon: ReactNode;
   section: string;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Menu", path: "/menu", icon: <FaHome />, section: "Task Logs" },
-
-  {
-    label: "Torque Job",
-    path: "/torque-job",
-    icon: <FaWrench />,
-    section: "Task Logs",
-  },
-  {
-    label: "Work Progress",
-    path: "/previous-work",
-    icon: <FaChartLine />,
-    section: "Project",
-  },
-  {
-    label: "Timesheet",
-    path: "/timesheet",
-    icon: <FaClock />,
-    section: "Project",
-  },
+  { label: "Home", path: "/menu", icon: <FaHome />, section: "Field" },
+  { label: "Inspect", path: "/inspect", icon: <FaSolarPanel />, section: "Field" },
+  { label: "Timesheet", path: "/timesheet", icon: <FaClock />, section: "Field" },
+  { label: "Reports", path: "/reports", icon: <FaChartBar />, section: "Admin", adminOnly: true },
 ];
-
-const SECTIONS = ["Task Logs", "Project"];
-
-const BOTTOM_NAV = NAV_ITEMS; // all 3 in bottom bar
 
 interface LayoutProps {
   session: Session;
@@ -60,6 +35,9 @@ export default function Layout({
   const navigate = useNavigate();
   const location = useLocation();
 
+  const items = NAV_ITEMS.filter((i) => !i.adminOnly || session.role === "admin");
+  const sections = [...new Set(items.map((i) => i.section))];
+
   const initials = session?.name
     ? session.name
         .split(" ")
@@ -72,7 +50,7 @@ export default function Layout({
   return (
     <div className={styles.shell}>
       {/* Sidebar — desktop only */}
-      <aside className={styles.sidebar}>
+      <aside className={styles.sidebar} data-print="hide">
         <div className={styles.sidebarLogo}>
           <img
             src="/lumico-logo-clear.png"
@@ -87,13 +65,13 @@ export default function Layout({
         </div>
 
         <nav className={styles.nav}>
-          {SECTIONS.map((section) => (
+          {sections.map((section) => (
             <div key={section} className={styles.navSection}>
               <div className={styles.navLabel}>{section}</div>
-              {NAV_ITEMS.filter((i) => i.section === section).map((item) => (
+              {items.filter((i) => i.section === section).map((item) => (
                 <button
                   key={item.path}
-                  className={`${styles.navItem} ${location.pathname === item.path ? styles.active : ""}`}
+                  className={`${styles.navItem} ${location.pathname.startsWith(item.path) ? styles.active : ""}`}
                   onClick={() => navigate(item.path)}
                 >
                   <span className={styles.navIcon}>{item.icon}</span>
@@ -128,14 +106,14 @@ export default function Layout({
       </aside>
 
       {/* Main content */}
-      <main className={styles.main}>{children}</main>
+      <main className={styles.main} data-print="main">{children}</main>
 
       {/* Bottom tab bar — mobile only */}
-      <nav className={styles.bottomNav}>
-        {BOTTOM_NAV.map((item) => (
+      <nav className={styles.bottomNav} data-print="hide" aria-label="Main">
+        {items.map((item) => (
           <button
             key={item.path}
-            className={`${styles.tabItem} ${location.pathname === item.path ? styles.tabActive : ""}`}
+            className={`${styles.tabItem} ${location.pathname.startsWith(item.path) ? styles.tabActive : ""}`}
             onClick={() => navigate(item.path)}
           >
             <span className={styles.tabIcon}>{item.icon}</span>
