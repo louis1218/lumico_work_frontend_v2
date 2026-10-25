@@ -239,9 +239,9 @@
   margin: 0;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--color-info-fill);
-  border: 1px solid var(--color-info-border);
-  color: var(--color-info);
+  background: var(--color-success-fill);
+  border: 1px solid var(--color-success-border);
+  color: var(--color-success);
   font-size: var(--text-subhead);
   line-height: 1.4;
 }
@@ -406,11 +406,11 @@
 
 .thumbs {
   list-style: none;
-  margin: 0;
+  margin: var(--space-4) 0 0;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: var(--space-2);
+  gap: var(--space-3);
 
   li {
     position: relative;
@@ -427,10 +427,21 @@
     display: block;
   }
 
-  button {
+  .openBtn {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: zoom-in;
+  }
+
+  .thumbRemove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
     display: grid;
     place-items: center;
     width: 32px;
@@ -439,6 +450,7 @@
     border: 0;
     background: rgba(0, 0, 0, 0.7);
     color: #fff;
+    z-index: 1;
   }
 }
 
@@ -608,4 +620,171 @@
     background: rgba(255, 255, 255, 0.15);
     color: #fff;
   }
+}
+
+// One card per broken panel
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator-2);
+  border-left: 3px solid var(--color-danger);
+
+  textarea {
+    width: 100%;
+    min-height: 64px;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-separator-3);
+    background: var(--color-surface);
+    color: var(--color-label);
+    font: inherit;
+    font-size: var(--text-field);
+    resize: vertical;
+  }
+}
+
+.entryHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+
+  strong {
+    font-size: var(--text-title3);
+  }
+}
+
+.removeBtn {
+  min-height: var(--target-min);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--color-danger);
+  font: inherit;
+  font-size: var(--text-subhead);
+  font-weight: 600;
+}
+
+.addPanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--target-field);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-tint-border);
+  background: var(--color-tint-dim);
+  color: var(--color-tint);
+  font: inherit;
+  font-size: var(--text-field);
+  font-weight: 600;
+
+  &:disabled {
+    opacity: 0.4;
+  }
+}
+
+.req {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--color-danger);
+  margin-left: var(--space-2);
+}
+
+.entry .photoBtn {
+  font-size: var(--text-subhead);
+  white-space: nowrap;
+  padding: 0 var(--space-2);
+}
+
+// Already reported on this tracker
+.recorded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-success-fill);
+  border: 1px solid var(--color-success-border);
+}
+
+.recordedTitle {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-success);
+
+  svg {
+    flex: none;
+    margin-top: 3px;
+  }
+}
+
+.recordedBy {
+  margin: 0;
+  font-size: var(--text-subhead);
+  color: var(--color-text-muted);
+}
+
+.recordedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+
+  > li {
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.25);
+  }
+}
+
+.recordedHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+
+  strong {
+    font-size: var(--text-body);
+    color: var(--color-text);
+  }
+  span {
+    font-size: var(--text-subhead);
+    color: var(--color-text-muted);
+  }
+}
+
+.recordedNote {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-subhead);
+  color: var(--color-text-muted);
+  white-space: pre-line;
+}
+
+.addToExisting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-tint);
+  color: var(--color-brand-text);
+  font: inherit;
+  font-weight: 700;
+  font-size: var(--text-body);
+  cursor: pointer;
 }

@@ -3,48 +3,9 @@ import { FaChevronLeft, FaChevronRight, FaDownload, FaPrint, FaTimes } from "rea
 import { apiFetch, api, apiJson } from "../../api";
 import { dateTimeOf, dayKey, fullName, localDate, longDate, shiftDay } from "../../lib/inspection";
 import Dropdown from "../Dropdown/Dropdown";
+import ClientReport from "./ClientReport";
+import type { Daily } from "./types";
 import styles from "./Reports.module.scss";
-
-interface Daily {
-  date: string;
-  site: string | null;
-  sites: string[];
-  photo_base: string;
-  totals: {
-    inspections: number;
-    trackers_checked: number;
-    blocks_touched: number;
-    trackers_with_issues: number;
-    broken_panels: number;
-    trackers_total: number;
-  };
-  blocks: { block: number; trackers_checked: number; trackers_total: number; issues: number; broken_panels: number }[];
-  staff: {
-    username: string;
-    first_name: string | null;
-    last_name: string | null;
-    inspections: number;
-    trackers_checked: number;
-    issues: number;
-    broken_panels: number;
-    first_at: string;
-    last_at: string;
-  }[];
-  issues: {
-    id: number;
-    site: string;
-    block: number;
-    tracker: number;
-    broken_panels: number;
-    defects: string[] | null;
-    notes: string | null;
-    photo_keys: string[] | null;
-    username: string;
-    first_name: string | null;
-    last_name: string | null;
-    inspected_at: string;
-  }[];
-}
 
 interface Progress {
   from: string;
@@ -59,7 +20,7 @@ interface Progress {
   }[];
 }
 
-type Tab = "daily" | "staff";
+type Tab = "daily" | "staff" | "client";
 
 export default function Reports() {
   const [tab, setTab] = useState<Tab>("daily");
@@ -79,7 +40,7 @@ export default function Reports() {
     setLoading(true);
     setError("");
     const job =
-      tab === "daily"
+      tab !== "staff"
         ? apiJson<Daily>(`/reports/daily?${new URLSearchParams({ date, site })}`).then((d) => !cancelled && setDaily(d))
         : apiJson<Progress>(
             `/reports/staff-progress?${new URLSearchParams({ date_to: date, date_from: shiftDay(date, -13), site })}`,
@@ -123,9 +84,9 @@ export default function Reports() {
       <header className={styles.top} data-print="hide">
         <h1 className={styles.title}>Reports</h1>
         <div className={styles.tabs} role="tablist">
-          {(["daily", "staff"] as Tab[]).map((t) => (
+          {(["daily", "staff", "client"] as Tab[]).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {t === "daily" ? "Daily report" : "Staff progress"}
+              {t === "daily" ? "Daily report" : t === "staff" ? "Staff progress" : "Client report"}
             </button>
           ))}
         </div>
@@ -175,8 +136,8 @@ export default function Reports() {
             <button onClick={downloadCsv} disabled={exporting}>
               <FaDownload aria-hidden="true" /> {exporting ? "Preparing…" : "Download CSV"}
             </button>
-            <button onClick={() => window.print()}>
-              <FaPrint aria-hidden="true" /> Print or save PDF
+            <button onClick={() => setTab("client")}>
+              <FaPrint aria-hidden="true" /> Client report (PDF)
             </button>
           </div>
         )}
@@ -189,8 +150,10 @@ export default function Reports() {
       )}
       {loading && <p className={styles.muted}>Loading…</p>}
 
+      {tab === "client" && daily && !loading && <ClientReport daily={daily} />}
+
       {tab === "daily" && daily && !loading && (
-        <div data-print="main">
+        <div>
           <p className={styles.printTitle}>
             Lumico solar farm inspection report, {longDate(daily.date)}
             {daily.site ? `, ${daily.site}` : ""}
@@ -279,7 +242,7 @@ export default function Reports() {
           </section>
 
           <section className={styles.panel}>
-            <h2>Broken panels ({daily.issues.length} {daily.issues.length === 1 ? "tracker" : "trackers"})</h2>
+            <h2>Broken panels ({daily.issues.length})</h2>
             {daily.issues.length === 0 ? (
               <p className={styles.muted}>No issues recorded.</p>
             ) : (
@@ -289,9 +252,10 @@ export default function Reports() {
                     <div className={styles.issueHead}>
                       <strong>
                         Block {i.block}, tracker {i.tracker}
+                        {i.panel ? `, panel ${i.panel}` : ""}
                       </strong>
                       <span className={styles.bad}>
-                        {i.broken_panels} broken {i.broken_panels === 1 ? "panel" : "panels"}
+                        {i.panel ? "Broken" : `${i.broken_panels} broken ${i.broken_panels === 1 ? "panel" : "panels"}`}
                       </span>
                     </div>
                     <p className={styles.meta}>

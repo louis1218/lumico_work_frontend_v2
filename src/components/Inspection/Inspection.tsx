@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { FaCamera, FaCheck, FaImages, FaMinus, FaPlus, FaTimes } from "react-icons/fa";
+import { FaCamera, FaCheck, FaImages, FaPlus, FaTimes } from "react-icons/fa";
 import type { Session } from "../../App";
 import { apiJson } from "../../api";
 import {
@@ -7,10 +7,12 @@ import {
   PHOTO_BASE,
   type InspectionOptions,
   compressImage,
+  dateTimeOf,
   fullName,
   localDate,
   longDate,
   timeOf,
+  watermarkImage,
 } from "../../lib/inspection";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "./Inspection.module.scss";
@@ -24,9 +26,9 @@ export interface TrackerStatus {
   username: string;
   name: string;
   inspected_at: string;
-  defects: string[];
   notes: string;
   photo_keys: string[];
+  panels: { panel: number; defects: string[]; notes: string; photo_keys: string[] }[];
 }
 
 interface Photo {
@@ -34,6 +36,17 @@ interface Photo {
   file: File;
   url: string;
   key?: string; // set once uploaded, so a retry never uploads twice
+}
+
+/** One broken panel on the tracker being checked */
+interface Entry {
+  id: string;
+  panel: string;
+  defects: string[];
+  otherText: string;
+  notes: string;
+  kept: string[]; // photos already saved by an earlier check of this tracker
+  photos: Photo[];
 }
 
 interface MySummary {
@@ -49,17 +62,23 @@ interface StatusRow {
   first_name: string | null;
   last_name: string | null;
   inspected_at: string;
-  defects: string[] | null;
   notes: string | null;
   photo_keys: string[] | null;
+  panels: TrackerStatus["panels"] | null;
 }
 
 type Condition = "ok" | "issue" | null;
 const MAX_PHOTOS = 10;
 const LAST_BLOCK_KEY = "lumico:lastBlock";
+const newId = () => crypto.randomUUID();
+const blankEntry = (): Entry => ({ id: newId(), panel: "", defects: [], otherText: "", notes: "", kept: [], photos: [] });
+
+const withOther = (e: Entry) =>
+  e.defects.includes("Other") ? `Other: ${e.otherText.trim()}${e.notes.trim() ? `\n${e.notes.trim()}` : ""}` : e.notes.trim();
 
 export default function Inspection({ session }: Props) {
   const site = session.site.toLowerCase();
+  const siteName = site.charAt(0).toUpperCase() + site.slice(1);
   const today = localDate();
 
   const [options, setOptions] = useState<InspectionOptions>(FALLBACK_OPTIONS);
@@ -69,11 +88,10 @@ export default function Inspection({ session }: Props) {
   const [mine, setMine] = useState<MySummary | null>(null);
 
   const [condition, setCondition] = useState<Condition>(null);
-  const [broken, setBroken] = useState(1);
-  const [defects, setDefects] = useState<string[]>([]);
-  const [notes, setNotes] = useState("");
-  const [otherText, setOtherText] = useState("");
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [okPhotos, setOkPhotos] = useState<Photo[]>([]);
+  const [okKept, setOkKept] = useState<string[]>([]);
+  const [okNotes, setOkNotes] = useState("");
   const [adding, setAdding] = useState(false);
 
   const [viewing, setViewing] = useState<string | null>(null);
@@ -82,8 +100,8 @@ export default function Inspection({ session }: Props) {
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
   const topRef = useRef<HTMLDivElement>(null);
-  const photosRef = useRef<Photo[]>([]);
-  photosRef.current = photos;
+  const allPhotosRef = useRef<Photo[]>([]);
+  allPhotosRef.current = [...okPhotos, ...entries.flatMap((e) => e.photos)];
 
   const blockNo = block ? Number(block) : null;
   const trackerNo = tracker ? Number(tracker) : null;
@@ -113,9 +131,9 @@ export default function Inspection({ session }: Props) {
               username: t.username,
               name: fullName(t.first_name, t.last_name, t.username),
               inspected_at: t.inspected_at,
-              defects: t.defects ?? [],
               notes: t.notes ?? "",
               photo_keys: t.photo_keys ?? [],
+              panels: t.panels ?? [],
             });
           }
           return map;
@@ -143,20 +161,19 @@ export default function Inspection({ session }: Props) {
   // Free the photo previews when leaving the screen
   useEffect(
     () => () => {
-      photosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+      allPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
     },
     [],
   );
 
   // ── Form helpers ──────────────────────────────────────────────────────────
   const resetForm = () => {
-    photosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
-    setPhotos([]);
+    allPhotosRef.current.forEach((p) => URL.revokeObjectURL(p.url));
+    setEntries([]);
+    setOkPhotos([]);
+    setOkKept([]);
+    setOkNotes("");
     setCondition(null);
-    setBroken(1);
-    setDefects([]);
-    setNotes("");
-    setOtherText("");
     setError("");
   };
 
@@ -172,68 +189,117 @@ export default function Inspection({ session }: Props) {
     resetForm();
   };
 
-  const addPhotos = async (e: ChangeEvent<HTMLInputElement>) => {
+  const chooseCondition = (c: Exclude<Condition, null>) => {
+    setCondition(c);
+    if (c === "issue" && entries.length === 0) setEntries([blankEntry()]);
+  };
+
+  const addToExisting = () => {
+    setCondition("issue");
+    setEntries((prev) => (prev.length === 0 ? [blankEntry()] : prev));
+    setTimeout(() => document.getElementById("pn")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+
+  const patchEntry = (id: string, patch: Partial<Entry>) =>
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+
+  const removeEntry = (id: string) =>
+    setEntries((prev) => {
+      prev.find((e) => e.id === id)?.photos.forEach((p) => URL.revokeObjectURL(p.url));
+      return prev.filter((e) => e.id !== id);
+    });
+
+  const makePhotos = async (files: File[], room: number): Promise<Photo[]> => {
+    const out: Photo[] = [];
+    for (const f of files.slice(0, room)) {
+      const file = await compressImage(f);
+      out.push({ id: newId(), file, url: URL.createObjectURL(file) });
+    }
+    return out;
+  };
+
+  const addEntryPhotos = async (id: string, e: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = ""; // lets the same photo be picked again
-    if (!files.length) return;
+    const entry = entries.find((x) => x.id === id);
+    if (!files.length || !entry) return;
     setAdding(true);
-    const added: Photo[] = [];
-    for (const f of files.slice(0, MAX_PHOTOS - photos.length)) {
-      const file = await compressImage(f);
-      added.push({ id: crypto.randomUUID(), file, url: URL.createObjectURL(file) });
-    }
-    setPhotos((prev) => [...prev, ...added].slice(0, MAX_PHOTOS));
+    const added = await makePhotos(files, MAX_PHOTOS - entry.kept.length - entry.photos.length);
+    setEntries((prev) => prev.map((x) => (x.id === id ? { ...x, photos: [...x.photos, ...added] } : x)));
     setAdding(false);
   };
 
-  const removePhoto = (id: string) => {
-    setPhotos((prev) => {
-      const gone = prev.find((p) => p.id === id);
-      if (gone) URL.revokeObjectURL(gone.url);
-      return prev.filter((p) => p.id !== id);
-    });
+  const addOkPhotos = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
+    setAdding(true);
+    const added = await makePhotos(files, MAX_PHOTOS - okKept.length - okPhotos.length);
+    setOkPhotos((prev) => [...prev, ...added]);
+    setAdding(false);
   };
 
-  const toggleDefect = (d: string) =>
-    setDefects((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  const removeEntryPhoto = (id: string, photoId: string) =>
+    setEntries((prev) =>
+      prev.map((e) => {
+        if (e.id !== id) return e;
+        e.photos.filter((p) => p.id === photoId).forEach((p) => URL.revokeObjectURL(p.url));
+        return { ...e, photos: e.photos.filter((p) => p.id !== photoId) };
+      }),
+    );
+
+  const removeOkPhoto = (photoId: string) =>
+    setOkPhotos((prev) => {
+      prev.filter((p) => p.id === photoId).forEach((p) => URL.revokeObjectURL(p.url));
+      return prev.filter((p) => p.id !== photoId);
+    });
+
+  const toggleDefect = (id: string, d: string) =>
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.id === id ? { ...e, defects: e.defects.includes(d) ? e.defects.filter((x) => x !== d) : [...e.defects, d] } : e,
+      ),
+    );
 
   const existing = trackerNo !== null ? statuses.get(trackerNo) : undefined;
-  const needsPhoto = condition === "issue" && photos.length === 0;
-  const needsOther = condition === "issue" && defects.includes("Other") && !otherText.trim();
-  const canSave =
-    blockNo !== null && trackerNo !== null && condition !== null && !needsPhoto && !needsOther && !saving && !adding;
+  // Every submission is new: what was saved earlier is listed above the form and never edited here.
 
-  const nextUnchecked = useMemo(() => {
-    return (done: Map<number, TrackerStatus>, from: number): number | null => {
-      for (let n = from + 1; n <= perBlock; n++) if (!done.has(n)) return n;
-      for (let n = 1; n < from; n++) if (!done.has(n)) return n;
-      return null;
-    };
-  }, [perBlock]);
+  // The first thing stopping a save, shown under the Save button
+  const problem = useMemo(() => {
+    if (blockNo === null || trackerNo === null) return "Choose a block and tracker to start.";
+    if (condition === null) return "Choose the condition to save.";
+    if (condition === "ok") return existing && existing.panels.length > 0 ? "This tracker already has broken panels recorded. Choose Issues found to add more." : "";
+    for (const [i, e] of entries.entries()) {
+      const label = e.panel ? `panel ${e.panel}` : `broken panel ${i + 1}`;
+      if (!e.panel) return `Choose which panel is broken (broken panel ${i + 1}).`;
+      if (e.defects.includes("Other") && !e.otherText.trim()) return `Describe the other problem on ${label}.`;
+      if (e.kept.length + e.photos.length === 0) return `Add a photo of ${label}.`;
+    }
+    return entries.length === 0 ? "Add at least one broken panel." : "";
+  }, [blockNo, trackerNo, condition, entries, existing]);
+  const canSave = problem === "" && !saving && !adding;
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  const uploadPhotos = async (): Promise<string[]> => {
+  const uploadPhotos = async (photos: Photo[], lines: string[], label: string, done: { n: number; of: number }): Promise<string[]> => {
     const keys: string[] = [];
     for (const [i, photo] of photos.entries()) {
       if (photo.key) {
         keys.push(photo.key);
         continue;
       }
-      setProgress(`Uploading photo ${i + 1} of ${photos.length}…`);
+      done.n += 1;
+      setProgress(`Uploading photo ${done.n} of ${done.of}…`);
+      const stamped = await watermarkImage(photo.file, lines);
       const { uploadURL, key } = await apiJson<{ uploadURL: string; key: string }>(
         `/uploads/presign?${new URLSearchParams({
           project: `inspection_${site}`,
           mode: `block${blockNo}`,
-          filename: `t${trackerNo}_${Date.now()}_${i + 1}`,
-          contentType: photo.file.type || "image/jpeg",
+          filename: `t${trackerNo}_${label}_${Date.now()}_${i + 1}`,
+          contentType: "image/jpeg",
         })}`,
       );
       // Straight to S3. No login header here: the upload address is already signed.
-      const up = await fetch(uploadURL, {
-        method: "PUT",
-        headers: { "Content-Type": photo.file.type || "image/jpeg" },
-        body: photo.file,
-      });
+      const up = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: stamped });
       if (!up.ok) throw new Error("A photo did not upload. Check your signal and press Save again.");
       photo.key = key;
       keys.push(key);
@@ -246,37 +312,41 @@ export default function Inspection({ session }: Props) {
     setSaving(true);
     setError("");
     try {
-      const photo_keys = await uploadPhotos();
+      const stamp = dateTimeOf(new Date().toISOString());
+      const where = `Block ${blockNo} · Tracker ${trackerNo}`;
+      const sub = `${siteName} · ${stamp}`;
+      const total = (condition === "issue" ? entries.flatMap((e) => e.photos) : okPhotos).filter((p) => !p.key).length;
+      const done = { n: 0, of: total };
+      let payload: Record<string, unknown>;
+
+      if (condition === "issue") {
+        const panels = [];
+        for (const e of entries) {
+          const keys = await uploadPhotos(e.photos, [`${where} · Panel ${e.panel}`, sub], `p${e.panel}`, done);
+          panels.push({ panel: Number(e.panel), defects: e.defects, notes: withOther(e), photo_keys: [...e.kept, ...keys] });
+        }
+        payload = { panels };
+      } else {
+        const keys = await uploadPhotos(okPhotos, [where, sub], "ok", done);
+        payload = { panels: [], notes: okNotes.trim(), photo_keys: [...okKept, ...keys] };
+      }
+
       setProgress("Saving…");
       await apiJson("/inspections", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          site,
-          block: blockNo,
-          tracker: trackerNo,
-          broken_panels: condition === "issue" ? broken : 0,
-          defects: condition === "issue" ? defects : [],
-          notes:
-            condition === "issue" && defects.includes("Other")
-              ? `Other: ${otherText.trim()}${notes.trim() ? `\n${notes.trim()}` : ""}`
-              : notes,
-          photo_keys,
-          work_date: today,
-        }),
+        body: JSON.stringify({ site, block: blockNo, tracker: trackerNo, work_date: today, ...payload }),
       });
 
       const fresh = await loadBlock(blockNo);
       setStatuses(fresh);
       loadMine();
-      const next = nextUnchecked(fresh, trackerNo);
       setToast(
-        next === null
-          ? `Tracker ${trackerNo} saved. Block ${blockNo} is complete.`
-          : `Tracker ${trackerNo} saved. Next is tracker ${next}.`,
+        condition === "issue"
+          ? `Saved ${entries.length === 1 ? `panel ${entries[0].panel}` : `${entries.length} panels`} on tracker ${trackerNo}. Add another, or choose a different tracker.`
+          : `Tracker ${trackerNo} saved as no issues.`,
       );
       resetForm();
-      setTracker(next === null ? "" : String(next));
       topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save. Try again.");
@@ -287,6 +357,13 @@ export default function Inspection({ session }: Props) {
   };
 
   useEffect(() => {
+    if (!viewing) return;
+    const onKey = (ev: KeyboardEvent) => ev.key === "Escape" && setViewing(null);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewing]);
+
+  useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(""), 5000);
     return () => clearTimeout(t);
@@ -294,10 +371,28 @@ export default function Inspection({ session }: Props) {
 
   const saveLabel =
     condition === "issue"
-      ? `Save ${broken} broken ${broken === 1 ? "panel" : "panels"}`
+      ? `Save ${entries.length} broken ${entries.length === 1 ? "panel" : "panels"}`
       : condition === "ok"
         ? "Save: no issues"
         : "Save inspection";
+
+  const usedPanels = (exceptId: string) => new Set(entries.filter((e) => e.id !== exceptId && e.panel).map((e) => e.panel));
+
+  const recordedPanels = new Set((existing?.panels ?? []).map((p) => String(p.panel)));
+  const existingPhotos = existing ? [...existing.photo_keys, ...existing.panels.flatMap((p) => p.photo_keys)] : [];
+
+  const photoButtons = (onPick: (e: ChangeEvent<HTMLInputElement>) => void, full: boolean) => (
+    <div className={styles.photoButtons}>
+      <label className={styles.photoBtn}>
+        <FaCamera aria-hidden="true" /> Take photo
+        <input type="file" accept="image/*" capture="environment" onChange={onPick} disabled={full} />
+      </label>
+      <label className={styles.photoBtn}>
+        <FaImages aria-hidden="true" /> From gallery
+        <input type="file" accept="image/*" multiple onChange={onPick} disabled={full} />
+      </label>
+    </div>
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -370,28 +465,58 @@ export default function Inspection({ session }: Props) {
           </div>
 
           {existing && (
-            <div className={styles.notice}>
-              <p>
-                Already checked today by <strong>{existing.name}</strong> at {timeOf(existing.inspected_at)}
-                {existing.broken_panels > 0
-                  ? `: ${existing.broken_panels} broken ${existing.broken_panels === 1 ? "panel" : "panels"}`
-                  : ": no issues"}
-                . Saving again adds a new check and replaces it in the report.
+            <section className={styles.recorded} aria-labelledby="rec">
+              <h2 id="rec" className={styles.recordedTitle}>
+                <FaCheck aria-hidden="true" />
+                {existing.panels.length > 0
+                  ? `Already reported on this tracker: ${existing.panels.length} broken ${existing.panels.length === 1 ? "panel" : "panels"}`
+                  : "Already reported on this tracker: no issues"}
+              </h2>
+              <p className={styles.recordedBy}>
+                Last saved by {existing.name} at {timeOf(existing.inspected_at)}
               </p>
-              {existing.defects.length > 0 && <p>{existing.defects.join(", ")}</p>}
-              {existing.notes && <p className={styles.noticeNotes}>{existing.notes}</p>}
-              {existing.photo_keys.length > 0 && (
-                <ul className={styles.prevPhotos}>
-                  {existing.photo_keys.map((k, n) => (
-                    <li key={k}>
-                      <button type="button" onClick={() => setViewing(`${PHOTO_BASE}/${k}`)} aria-label={`Open saved photo ${n + 1}`}>
-                        <img src={`${PHOTO_BASE}/${k}`} alt={`Saved photo ${n + 1}`} loading="lazy" />
-                      </button>
+
+              {existing.panels.length > 0 ? (
+                <ul className={styles.recordedList}>
+                  {existing.panels.map((p) => (
+                    <li key={p.panel}>
+                      <div className={styles.recordedHead}>
+                        <strong>Panel {p.panel}</strong>
+                        <span>{p.defects.length > 0 ? p.defects.join(", ") : "No type chosen"}</span>
+                      </div>
+                      {p.notes && <p className={styles.recordedNote}>{p.notes}</p>}
+                      {p.photo_keys.length > 0 && (
+                        <ul className={styles.prevPhotos}>
+                          {p.photo_keys.map((k, n) => (
+                            <li key={k}>
+                              <button type="button" onClick={() => setViewing(`${PHOTO_BASE}/${k}`)} aria-label={`Enlarge photo ${n + 1} of panel ${p.panel}`}>
+                                <img src={`${PHOTO_BASE}/${k}`} alt={`Panel ${p.panel} photo ${n + 1}`} loading="lazy" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>
+              ) : (
+                existingPhotos.length > 0 && (
+                  <ul className={styles.prevPhotos}>
+                    {existingPhotos.map((k, n) => (
+                      <li key={k}>
+                        <button type="button" onClick={() => setViewing(`${PHOTO_BASE}/${k}`)} aria-label={`Enlarge saved photo ${n + 1}`}>
+                          <img src={`${PHOTO_BASE}/${k}`} alt={`Saved photo ${n + 1}`} loading="lazy" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )
               )}
-            </div>
+
+              <button type="button" className={styles.addToExisting} onClick={addToExisting}>
+                <FaPlus aria-hidden="true" /> Add another broken panel
+              </button>
+            </section>
           )}
 
           {/* 2 Condition */}
@@ -400,137 +525,187 @@ export default function Inspection({ session }: Props) {
               <span className={styles.step}>2</span> Condition
             </h2>
             <div className={styles.segment} role="radiogroup" aria-label="Tracker condition">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={condition === "ok"}
-                data-tone="ok"
-                onClick={() => setCondition("ok")}
-              >
+              <button type="button" role="radio" aria-checked={condition === "ok"} data-tone="ok" onClick={() => chooseCondition("ok")}>
                 <FaCheck aria-hidden="true" /> No issues
               </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={condition === "issue"}
-                data-tone="issue"
-                onClick={() => setCondition("issue")}
-              >
+              <button type="button" role="radio" aria-checked={condition === "issue"} data-tone="issue" onClick={() => chooseCondition("issue")}>
                 Issues found
               </button>
             </div>
+          </section>
 
-            {condition === "issue" && (
-              <div className={styles.issueBox}>
-                <div className={styles.stepperRow}>
-                  <span id="brokenLabel" className={styles.label}>
-                    Broken panels
-                  </span>
-                  <div className={styles.stepper} role="group" aria-labelledby="brokenLabel">
-                    <button
-                      type="button"
-                      aria-label="One fewer"
-                      onClick={() => setBroken((n) => Math.max(1, n - 1))}
-                      disabled={broken <= 1}
-                    >
-                      <FaMinus aria-hidden="true" />
-                    </button>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      max={999}
-                      value={broken}
-                      aria-labelledby="brokenLabel"
-                      onChange={(e) => setBroken(Math.min(999, Math.max(1, Number(e.target.value) || 1)))}
+          {/* 3a Broken panels: one card per panel */}
+          {condition === "issue" && (
+            <section className={styles.section} aria-labelledby="pn">
+              <h2 id="pn" className={styles.heading}>
+                <span className={styles.step}>3</span> Broken panels
+                <span className={styles.hint}>
+                  {entries.length} of {options.panels_per_tracker} panels
+                </span>
+              </h2>
+              <p className={styles.muted}>Add each broken panel with its own photos.</p>
+
+              {entries.map((e, i) => {
+                const used = usedPanels(e.id);
+                const photoCount = e.kept.length + e.photos.length;
+                return (
+                  <article key={e.id} className={styles.entry} aria-label={`Broken panel ${i + 1}`}>
+                    <div className={styles.entryHead}>
+                      <strong>{e.panel ? `Panel ${e.panel}` : `Broken panel ${i + 1}`}</strong>
+                      {entries.length > 1 && (
+                        <button type="button" className={styles.removeBtn} onClick={() => removeEntry(e.id)} disabled={saving}>
+                          Remove
+                        </button>
+                      )}
+                    </div>
+
+                    <Dropdown
+                      label="Which panel is broken?"
+                      value={e.panel}
+                      searchable
+                      numeric
+                      searchPlaceholder="Type a panel number"
+                      placeholder="Select panel"
+                      options={Array.from({ length: options.panels_per_tracker }, (_, n) => String(n + 1))
+                        .filter((v) => !used.has(v))
+                        .map((v) => ({
+                          value: v,
+                          label: `Panel ${v}`,
+                          note: recordedPanels.has(v) ? "recorded" : undefined,
+                          tone: recordedPanels.has(v) ? ("issue" as const) : undefined,
+                        }))}
+                      onChange={(v) =>
+                        setEntries((prev) =>
+                          // a changed panel number means any uploaded photo needs a fresh stamp
+                          prev.map((x) => (x.id === e.id ? { ...x, panel: v, photos: x.photos.map((p) => ({ ...p, key: undefined })) } : x)),
+                        )
+                      }
                     />
-                    <button type="button" aria-label="One more" onClick={() => setBroken((n) => Math.min(999, n + 1))}>
-                      <FaPlus aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
 
-                <div>
-                  <span className={styles.label}>What is wrong? Choose all that apply</span>
-                  <div className={styles.chips}>
-                    {options.defect_types.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        aria-pressed={defects.includes(d)}
-                        className={styles.chip}
-                        onClick={() => toggleDefect(d)}
-                      >
-                        {d}
-                      </button>
+                    <div>
+                      <span className={styles.label}>What is wrong? Choose all that apply</span>
+                      <div className={styles.chips}>
+                        {options.defect_types.map((d) => (
+                          <button key={d} type="button" aria-pressed={e.defects.includes(d)} className={styles.chip} onClick={() => toggleDefect(e.id, d)}>
+                            {d}
+                          </button>
+                        ))}
+                      </div>
+                      {e.defects.includes("Other") && (
+                        <input
+                          className={styles.otherInput}
+                          type="text"
+                          maxLength={200}
+                          value={e.otherText}
+                          onChange={(ev) => patchEntry(e.id, { otherText: ev.target.value })}
+                          placeholder="Describe the other problem"
+                          aria-label="Describe the other problem"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <span className={styles.label}>
+                        Photos <em className={styles.req}>Required</em>
+                      </span>
+                      {photoButtons((ev) => addEntryPhotos(e.id, ev), photoCount >= MAX_PHOTOS)}
+                      {photoCount > 0 && (
+                        <ul className={styles.thumbs}>
+                          {e.kept.map((k, n) => (
+                            <li key={k}>
+                              <img src={`${PHOTO_BASE}/${k}`} alt={`Saved photo ${n + 1}`} />
+                              <button type="button" className={styles.thumbRemove} aria-label={`Remove saved photo ${n + 1}`} onClick={() => patchEntry(e.id, { kept: e.kept.filter((x) => x !== k) })} disabled={saving}>
+                                <FaTimes aria-hidden="true" />
+                              </button>
+                            </li>
+                          ))}
+                          {e.photos.map((p, n) => (
+                            <li key={p.id}>
+                              <button type="button" className={styles.openBtn} aria-label={`Enlarge photo ${n + 1}`} onClick={() => setViewing(p.url)}>
+                                <img src={p.url} alt={`New photo ${n + 1}`} />
+                              </button>
+                              <button type="button" className={styles.thumbRemove} aria-label={`Remove new photo ${n + 1}`} onClick={() => removeEntryPhoto(e.id, p.id)} disabled={saving}>
+                                <FaTimes aria-hidden="true" />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      maxLength={2000}
+                      value={e.notes}
+                      onChange={(ev) => patchEntry(e.id, { notes: ev.target.value })}
+                      placeholder="Notes for this panel (optional)"
+                      aria-label={`Notes for broken panel ${i + 1}`}
+                    />
+                  </article>
+                );
+              })}
+
+              <button
+                type="button"
+                className={styles.addPanel}
+                onClick={() => setEntries((prev) => [...prev, blankEntry()])}
+                disabled={saving || entries.length >= options.panels_per_tracker}
+              >
+                <FaPlus aria-hidden="true" /> Add another broken panel
+              </button>
+            </section>
+          )}
+
+          {/* 3b Nothing broken: optional photos and notes for the tracker */}
+          {condition === "ok" && (
+            <>
+              <section className={styles.section} aria-labelledby="ph">
+                <h2 id="ph" className={styles.heading}>
+                  <span className={styles.step}>3</span> Photos<span className={styles.hint}>Optional</span>
+                </h2>
+                {photoButtons(addOkPhotos, okKept.length + okPhotos.length >= MAX_PHOTOS)}
+                {okKept.length + okPhotos.length > 0 && (
+                  <ul className={styles.thumbs}>
+                    {okKept.map((k, n) => (
+                      <li key={k}>
+                        <img src={`${PHOTO_BASE}/${k}`} alt={`Saved photo ${n + 1}`} />
+                        <button type="button" aria-label={`Remove saved photo ${n + 1}`} onClick={() => setOkKept((prev) => prev.filter((x) => x !== k))} disabled={saving}>
+                          <FaTimes aria-hidden="true" />
+                        </button>
+                      </li>
                     ))}
-                  </div>
-                  {defects.includes("Other") && (
-                    <input
-                      className={styles.otherInput}
-                      type="text"
-                      maxLength={200}
-                      autoFocus
-                      value={otherText}
-                      onChange={(e) => setOtherText(e.target.value)}
-                      placeholder="Describe the other problem"
-                      aria-label="Describe the other problem"
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* 3 Photos */}
-          <section className={styles.section} aria-labelledby="ph">
-            <h2 id="ph" className={styles.heading}>
-              <span className={styles.step}>3</span> Photos
-              <span className={styles.hint}>{condition === "issue" ? "Required for issues" : "Optional"}</span>
-            </h2>
-            <div className={styles.photoButtons}>
-              <label className={styles.photoBtn}>
-                <FaCamera aria-hidden="true" /> Take photo
-                <input type="file" accept="image/*" capture="environment" onChange={addPhotos} disabled={photos.length >= MAX_PHOTOS} />
-              </label>
-              <label className={styles.photoBtn}>
-                <FaImages aria-hidden="true" /> From gallery
-                <input type="file" accept="image/*" multiple onChange={addPhotos} disabled={photos.length >= MAX_PHOTOS} />
-              </label>
-            </div>
-            {adding && <p className={styles.muted}>Preparing photos…</p>}
-            {photos.length > 0 && (
-              <ul className={styles.thumbs}>
-                {photos.map((p, i) => (
-                  <li key={p.id}>
-                    <img src={p.url} alt={`Photo ${i + 1}`} />
-                    <button type="button" aria-label={`Remove photo ${i + 1}`} onClick={() => removePhoto(p.id)} disabled={saving}>
-                      <FaTimes aria-hidden="true" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {needsPhoto && <p className={styles.muted}>Add at least one photo of the damage to save.</p>}
-          </section>
-
-          {/* 4 Notes */}
-          <section className={styles.section} aria-labelledby="nt">
-            <h2 id="nt" className={styles.heading}>
-              <span className={styles.step}>4</span> Notes<span className={styles.hint}>Optional</span>
-            </h2>
-            <textarea
-              rows={3}
-              maxLength={2000}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Where on the tracker, anything the next person should know"
-              aria-label="Notes"
-            />
-          </section>
+                    {okPhotos.map((p, n) => (
+                      <li key={p.id}>
+                        <button type="button" className={styles.openBtn} aria-label={`Enlarge photo ${n + 1}`} onClick={() => setViewing(p.url)}>
+                          <img src={p.url} alt={`New photo ${n + 1}`} />
+                        </button>
+                        <button type="button" className={styles.thumbRemove} aria-label={`Remove new photo ${n + 1}`} onClick={() => removeOkPhoto(p.id)} disabled={saving}>
+                          <FaTimes aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section className={styles.section} aria-labelledby="nt">
+                <h2 id="nt" className={styles.heading}>
+                  <span className={styles.step}>4</span> Notes<span className={styles.hint}>Optional</span>
+                </h2>
+                <textarea
+                  rows={3}
+                  maxLength={2000}
+                  value={okNotes}
+                  onChange={(e) => setOkNotes(e.target.value)}
+                  placeholder="Anything the next person should know"
+                  aria-label="Notes"
+                />
+              </section>
+            </>
+          )}
         </>
       )}
 
+      {adding && <p className={styles.muted}>Preparing photos…</p>}
       {error && (
         <p className={styles.error} role="alert">
           {error}
@@ -542,7 +717,7 @@ export default function Inspection({ session }: Props) {
           <button type="button" aria-label="Close photo" onClick={() => setViewing(null)}>
             <FaTimes aria-hidden="true" />
           </button>
-          <img src={viewing} alt="Saved inspection" onClick={(e) => e.stopPropagation()} />
+          <img src={viewing} alt="Photo enlarged" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
@@ -556,11 +731,7 @@ export default function Inspection({ session }: Props) {
             saveLabel
           )}
         </button>
-        {!saving && trackerNo === null && <p className={styles.actionHint}>Choose a block and tracker to start.</p>}
-        {!saving && needsOther && <p className={styles.actionHint}>Describe the other problem to save.</p>}
-        {!saving && trackerNo !== null && condition === null && (
-          <p className={styles.actionHint}>Choose the condition to save.</p>
-        )}
+        {!saving && problem && <p className={styles.actionHint}>{problem}</p>}
       </div>
     </div>
   );

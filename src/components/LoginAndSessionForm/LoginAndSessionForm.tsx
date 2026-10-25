@@ -36,27 +36,24 @@ export default function LoginAndSessionForm({
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(api("/auth/login"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, site }),
-      });
+      const res = await fetch(
+        api("/auth/login"),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password, site }),
+        },
+      );
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Login failed");
         return;
       }
 
-      const {
-        session_id,
-        session_token,
-        first_name,
-        last_name,
-        login_time,
-        role,
-      } = data;
+      const { session_id, session_token, first_name, last_name, login_time, role } = data;
       const name = `${first_name} ${last_name}`;
-      const expiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
+      const expiresAt = Date.now() + 1000 * 60 * 60 * 12;
+
       const sessionObject: Session = {
         site,
         date,
