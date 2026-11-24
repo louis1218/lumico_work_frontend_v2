@@ -3,6 +3,8 @@ import { FaCloudUploadAlt, FaCheck, FaChevronDown, FaChevronUp, FaExclamationTri
 import type { Session } from "../../App";
 import { timeOf } from "../../lib/inspection";
 import { QUEUE_CHANGED, isRepair, listQueue, removeItem, requestPersistence, saveItem, type QueuedItem } from "../../lib/offlineQueue";
+import { useNavigate } from "react-router-dom";
+import { log } from "../../lib/debugLog";
 import { isDirty } from "../../lib/dirty";
 import { PROGRESS_EVENT, photosOf, syncQueue, type SyncOutcome, type SyncProgress } from "../../lib/sync";
 import styles from "./SyncStatus.module.scss";
@@ -27,6 +29,7 @@ const describe = (i: QueuedItem) => {
  * it by itself whenever the app opens, the phone comes back online, or something new is saved.
  */
 export default function SyncStatus({ session }: Props) {
+  const navigate = useNavigate();
   const [items, setItems] = useState<QueuedItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [stalled, setStalled] = useState(false);
@@ -111,16 +114,22 @@ export default function SyncStatus({ session }: Props) {
         return;
       }
       const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
+      log(`app visible again after ${Math.round(away / 1000)}s`);
       hiddenAt.current = null;
       if (busyRef.current && away > AWAY_LONG_MS) restart();
       else trySync();
     };
+    const onNet = () => log(`phone says: ${navigator.onLine ? "online" : "offline"}`);
+    window.addEventListener("online", onNet);
+    window.addEventListener("offline", onNet);
     window.addEventListener("online", trySync);
     window.addEventListener("pageshow", onVisible);
     window.addEventListener(QUEUE_CHANGED, onChange);
     window.addEventListener(PROGRESS_EVENT, onProgress);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      window.removeEventListener("online", onNet);
+      window.removeEventListener("offline", onNet);
       window.removeEventListener("online", trySync);
       window.removeEventListener("pageshow", onVisible);
       window.removeEventListener(QUEUE_CHANGED, onChange);
@@ -139,6 +148,7 @@ export default function SyncStatus({ session }: Props) {
     } catch {
       return;
     }
+    log("auto reload to reconnect");
     window.location.reload();
   }, [fails, busy]);
 
@@ -273,6 +283,9 @@ export default function SyncStatus({ session }: Props) {
                   )}
                 </>
               )}
+              <button type="button" className={styles.btnQuiet} onClick={() => navigate("/debug")}>
+                Log
+              </button>
               <button type="button" className={styles.toggle} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Hide list" : "Show list"}>
                 {open ? <FaChevronUp aria-hidden="true" /> : <FaChevronDown aria-hidden="true" />}
               </button>

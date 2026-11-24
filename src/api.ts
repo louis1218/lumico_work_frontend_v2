@@ -26,9 +26,11 @@ export function apiFetch(input: string, init: RequestInit = {}): Promise<Respons
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  detail: string; // the browser's own error text, e.g. "TypeError: Load failed" (for the app log)
+  constructor(status: number, message: string, detail = "") {
     super(message);
     this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -39,8 +41,8 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
   let res: Response;
   try {
     res = await apiFetch(api(path), init);
-  } catch {
-    throw new ApiError(0, "No connection. Check your signal and try again.");
+  } catch (e) {
+    throw new ApiError(0, "No connection. Check your signal and try again.", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
