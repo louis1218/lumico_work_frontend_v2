@@ -1,42 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  FaCloudUploadAlt,
-  FaCheck,
-  FaChevronDown,
-  FaChevronUp,
-  FaExclamationTriangle,
-} from "react-icons/fa";
+import { FaCloudUploadAlt, FaCheck, FaChevronDown, FaChevronUp, FaExclamationTriangle } from "react-icons/fa";
 import type { Session } from "../../App";
 import { timeOf } from "../../lib/inspection";
-import {
-  QUEUE_CHANGED,
-  listQueue,
-  removeItem,
-  requestPersistence,
-  saveItem,
-  type QueuedInspection,
-} from "../../lib/offlineQueue";
-import {
-  PROGRESS_EVENT,
-  syncQueue,
-  type SyncOutcome,
-  type SyncProgress,
-} from "../../lib/sync";
+import { QUEUE_CHANGED, isRepair, listQueue, removeItem, requestPersistence, saveItem, type QueuedItem } from "../../lib/offlineQueue";
+import { PROGRESS_EVENT, photosOf, syncQueue, type SyncOutcome, type SyncProgress } from "../../lib/sync";
 import styles from "./SyncStatus.module.scss";
 
 interface Props {
   session: Session;
 }
 
-const photoCount = (i: QueuedInspection) =>
-  i.panels.reduce((n, p) => n + p.photos.length, 0) + i.okPhotos.length;
+const STALLED_AFTER_MS = 20_000; // no sign of progress for this long = "taking long"
+const AWAY_LONG_MS = 5_000; // the app was in the background at least this long
 
-const describe = (i: QueuedInspection) => {
-  const what =
-    i.panels.length === 0
-      ? "No issues"
-      : `${i.panels.length === 1 ? "Panel" : "Panels"} ${i.panels.map((p) => p.panel).join(", ")}`;
-  const photos = photoCount(i);
+const describe = (i: QueuedItem) => {
+  const list = `${i.panels.length === 1 ? "Panel" : "Panels"} ${i.panels.map((p) => p.panel).join(", ")}`;
+  const what = isRepair(i) ? `Repair · ${list}` : i.panels.length === 0 ? "No issues" : list;
+  const photos = photosOf(i).length;
   return `${what} · ${photos} ${photos === 1 ? "photo" : "photos"} · saved ${timeOf(i.inspected_at)}`;
 };
 
@@ -45,14 +25,18 @@ const describe = (i: QueuedInspection) => {
  * it by itself whenever the app opens, the phone comes back online, or something new is saved.
  */
 export default function SyncStatus({ session }: Props) {
-  const [items, setItems] = useState<QueuedInspection[]>([]);
+  const [items, setItems] = useState<QueuedItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [stalled, setStalled] = useState(false);
   const [stopped, setStopped] = useState<SyncOutcome["stopped"]>(null);
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [batchTotal, setBatchTotal] = useState(0); // how many were waiting when this upload round began
   const [open, setOpen] = useState(true);
   const [allDone, setAllDone] = useState(false); // briefly true after the last waiting inspection uploads
   const busyRef = useRef(false);
+  const roundRef = useRef(0);
+  const lastActivity = useRef(Date.now());
+  const hiddenAt = useRef<number | null>(null);
   const hadWaiting = useRef(false);
 
   const refresh = useCallback(() => {
@@ -61,26 +45,41 @@ export default function SyncStatus({ session }: Props) {
       .catch(() => {});
   }, []);
 
-  const trySync = useCallback(async () => {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    try {
-      const waitingNow = (await listQueue()).filter(
-        (i) => i.username === session.username && !i.error,
-      );
-      setBatchTotal(waitingNow.length);
-      const result = await syncQueue(session.username);
-      setStopped(result.stopped);
-    } catch {
-      setStopped("offline");
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-      setProgress(null);
-      refresh();
-    }
-  }, [session.username, refresh]);
+  // force = replace an upload that is hanging with a fresh one
+  const startSync = useCallback(
+    async (force: boolean) => {
+      if (busyRef.current && !force) return;
+      const round = ++roundRef.current;
+      busyRef.current = true;
+      lastActivity.current = Date.now();
+      setBusy(true);
+      setStalled(false);
+      try {
+        const waitingNow = (await listQueue()).filter((i) => i.username === session.username && !i.error);
+        if (round === roundRef.current) setBatchTotal(waitingNow.length);
+        const result = await syncQueue(session.username, force);
+        if (round === roundRef.current) setStopped(result.stopped);
+      } catch {
+        if (round === roundRef.current) setStopped("offline");
+      } finally {
+        if (round === roundRef.current) {
+          busyRef.current = false;
+          setBusy(false);
+          setProgress(null);
+          refresh();
+        }
+      }
+    },
+    [session.username, refresh],
+  );
+
+  const trySync = useCallback(() => {
+    void startSync(false);
+  }, [startSync]);
+
+  const restart = useCallback(() => {
+    void startSync(true);
+  }, [startSync]);
 
   useEffect(() => {
     requestPersistence();
@@ -90,35 +89,75 @@ export default function SyncStatus({ session }: Props) {
 
   useEffect(() => {
     const onChange = () => {
+      lastActivity.current = Date.now();
       refresh();
       trySync();
     };
-    const onVisible = () => {
-      if (document.visibilityState === "visible") trySync();
-    };
-    const onProgress = (e: Event) =>
+    const onProgress = (e: Event) => {
+      lastActivity.current = Date.now();
+      setStalled(false);
       setProgress((e as CustomEvent<SyncProgress | null>).detail);
+    };
+    // Coming back to the app: a phone may have frozen or dropped the upload while it was away
+    const onVisible = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt.current = Date.now();
+        return;
+      }
+      const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
+      hiddenAt.current = null;
+      if (busyRef.current && away > AWAY_LONG_MS) restart();
+      else trySync();
+    };
     window.addEventListener("online", trySync);
+    window.addEventListener("pageshow", onVisible);
     window.addEventListener(QUEUE_CHANGED, onChange);
     window.addEventListener(PROGRESS_EVENT, onProgress);
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       window.removeEventListener("online", trySync);
+      window.removeEventListener("pageshow", onVisible);
       window.removeEventListener(QUEUE_CHANGED, onChange);
       window.removeEventListener(PROGRESS_EVENT, onProgress);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [refresh, trySync]);
+  }, [refresh, trySync, restart]);
 
   // Keep trying while anything is waiting (a phone can be "online" with no real signal)
-  const waiting = items.filter(
-    (i) => i.username === session.username && !i.error,
-  );
+  const waiting = items.filter((i) => i.username === session.username && !i.error);
   useEffect(() => {
     if (waiting.length === 0) return;
     const t = setInterval(trySync, 20_000);
     return () => clearInterval(t);
   }, [waiting.length, trySync]);
+
+  // Notice an upload that has stopped moving
+  useEffect(() => {
+    if (!busy) {
+      setStalled(false);
+      return;
+    }
+    const t = setInterval(() => setStalled(Date.now() - lastActivity.current > STALLED_AFTER_MS), 3000);
+    return () => clearInterval(t);
+  }, [busy]);
+
+  // Keep the screen on while uploading: a locked phone pauses the app and the upload with it
+  useEffect(() => {
+    if (!busy || !("wakeLock" in navigator)) return;
+    let lock: WakeLockSentinel | null = null;
+    let cancelled = false;
+    navigator.wakeLock
+      .request("screen")
+      .then((l) => {
+        if (cancelled) l.release().catch(() => {});
+        else lock = l;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      lock?.release().catch(() => {});
+    };
+  }, [busy]);
 
   // Say so when the last one goes up, so the bar does not just vanish
   useEffect(() => {
@@ -134,53 +173,32 @@ export default function SyncStatus({ session }: Props) {
     return () => clearTimeout(t);
   }, [waiting.length]);
 
-  const failed = items.filter(
-    (i) => i.username === session.username && i.error,
-  );
+  const failed = items.filter((i) => i.username === session.username && i.error);
   const others = items.filter((i) => i.username !== session.username);
-  if (
-    waiting.length === 0 &&
-    failed.length === 0 &&
-    others.length === 0 &&
-    !allDone
-  )
-    return null;
+  if (waiting.length === 0 && failed.length === 0 && others.length === 0 && !allDone) return null;
 
-  const retry = async (item: QueuedInspection) => {
+  const retry = async (item: QueuedItem) => {
     await saveItem({ ...item, error: undefined, attempts: 0 });
     refresh();
     trySync();
   };
 
-  const discard = async (item: QueuedInspection) => {
-    if (
-      !window.confirm(
-        `Delete block ${item.block}, tracker ${item.tracker} from this phone? It will never be uploaded.`,
-      )
-    )
-      return;
+  const discard = async (item: QueuedItem) => {
+    if (!window.confirm(`Delete block ${item.block}, tracker ${item.tracker} from this phone? It will never be uploaded.`)) return;
     await removeItem(item.id);
     refresh();
   };
 
-  const otherNames = [...new Set(others.map((i) => i.name || i.username))].join(
-    ", ",
-  );
+  const otherNames = [...new Set(others.map((i) => i.name || i.username))].join(", ");
   const doneThisRound = Math.max(0, batchTotal - waiting.length);
 
-  const status = (item: QueuedInspection) => {
+  const status = (item: QueuedItem) => {
     if (progress?.id === item.id) {
-      if (progress.stage === "saving")
-        return { text: "Saving…", pct: 100, live: true };
-      const pct =
-        progress.total > 0
-          ? Math.round((progress.done / progress.total) * 100)
-          : 0;
+      if (progress.stage === "saving") return { text: "Saving…", pct: 100, live: true };
+      const pct = progress.total > 0 ? Math.round(((progress.done + progress.part) / progress.total) * 100) : 0;
+      const n = Math.min(progress.done + 1, progress.total);
       return {
-        text:
-          progress.total > 0
-            ? `Uploading photo ${Math.min(progress.done + 1, progress.total)} of ${progress.total}`
-            : "Uploading…",
+        text: progress.total > 0 ? `Photo ${n} of ${progress.total} · ${pct}%` : "Uploading…",
         pct,
         live: true,
       };
@@ -197,15 +215,16 @@ export default function SyncStatus({ session }: Props) {
             <FaCloudUploadAlt aria-hidden="true" className={styles.icon} />
             <p className={styles.text}>
               <strong>
-                {waiting.length}{" "}
-                {waiting.length === 1 ? "inspection" : "inspections"}
+                {waiting.length} {waiting.length === 1 ? "inspection" : "inspections"}
               </strong>{" "}
               saved on this phone, not uploaded yet.{" "}
               <span className={styles.sub}>
                 {busy
-                  ? batchTotal > 1
-                    ? `Uploading ${Math.min(doneThisRound + 1, batchTotal)} of ${batchTotal}…`
-                    : "Uploading…"
+                  ? stalled
+                    ? "This is taking long. Check your signal, or restart the upload."
+                    : batchTotal > 1
+                      ? `Uploading ${Math.min(doneThisRound + 1, batchTotal)} of ${batchTotal}. Keep the app open.`
+                      : "Uploading. Keep the app open."
                   : stopped === "login"
                     ? "Your login has expired. Log in again to upload."
                     : stopped === "offline"
@@ -214,26 +233,19 @@ export default function SyncStatus({ session }: Props) {
               </span>
             </p>
             <div className={styles.actions}>
-              <button
-                type="button"
-                className={styles.btn}
-                onClick={trySync}
-                disabled={busy}
-              >
-                Upload now
-              </button>
-              <button
-                type="button"
-                className={styles.toggle}
-                onClick={() => setOpen((o) => !o)}
-                aria-expanded={open}
-                aria-label={open ? "Hide list" : "Show list"}
-              >
-                {open ? (
-                  <FaChevronUp aria-hidden="true" />
-                ) : (
-                  <FaChevronDown aria-hidden="true" />
-                )}
+              {busy ? (
+                stalled && (
+                  <button type="button" className={styles.btn} onClick={restart}>
+                    Restart upload
+                  </button>
+                )
+              ) : (
+                <button type="button" className={styles.btn} onClick={trySync}>
+                  Upload now
+                </button>
+              )}
+              <button type="button" className={styles.toggle} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Hide list" : "Show list"}>
+                {open ? <FaChevronUp aria-hidden="true" /> : <FaChevronDown aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -273,22 +285,13 @@ export default function SyncStatus({ session }: Props) {
             <strong>
               Block {item.block}, tracker {item.tracker}
             </strong>{" "}
-            could not be uploaded.{" "}
-            <span className={styles.sub}>{item.error}</span>
+            could not be uploaded. <span className={styles.sub}>{item.error}</span>
           </p>
           <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.btn}
-              onClick={() => retry(item)}
-            >
+            <button type="button" className={styles.btn} onClick={() => retry(item)}>
               Try again
             </button>
-            <button
-              type="button"
-              className={styles.btnQuiet}
-              onClick={() => discard(item)}
-            >
+            <button type="button" className={styles.btnQuiet} onClick={() => discard(item)}>
               Delete
             </button>
           </div>
@@ -300,14 +303,10 @@ export default function SyncStatus({ session }: Props) {
           <FaExclamationTriangle aria-hidden="true" className={styles.icon} />
           <p className={styles.text}>
             <strong>
-              {others.length}{" "}
-              {others.length === 1 ? "inspection" : "inspections"}
+              {others.length} {others.length === 1 ? "inspection" : "inspections"}
             </strong>{" "}
-            from {otherNames} {others.length === 1 ? "is" : "are"} still on this
-            phone.{" "}
-            <span className={styles.sub}>
-              They need to log in here to upload.
-            </span>
+            from {otherNames} {others.length === 1 ? "is" : "are"} still on this phone.{" "}
+            <span className={styles.sub}>They need to log in here to upload.</span>
           </p>
         </div>
       )}
@@ -316,10 +315,7 @@ export default function SyncStatus({ session }: Props) {
         <div className={`${styles.bar} ${styles.good}`}>
           <FaCheck aria-hidden="true" className={styles.icon} />
           <p className={styles.text}>
-            <strong>All uploaded.</strong>{" "}
-            <span className={styles.sub}>
-              Everything saved on this phone is now in the system.
-            </span>
+            <strong>All uploaded.</strong> <span className={styles.sub}>Everything saved on this phone is now in the system.</span>
           </p>
         </div>
       )}

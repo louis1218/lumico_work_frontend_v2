@@ -8,6 +8,7 @@ import PreviousWork from "./components/PreviousWork/PreviousWork";
 import TorqueJobForm from "./components/TorqueJobForm/TorqueJobForm";
 import Layout from "./components/Layout/Layout";
 import Inspection from "./components/Inspection/Inspection";
+import Repair from "./components/Repair/Repair";
 import Reports from "./components/Reports/Reports";
 import SyncStatus from "./components/SyncStatus/SyncStatus";
 import { api, apiFetch, SESSION_EXPIRED_EVENT } from "./api";
@@ -194,6 +195,7 @@ export default function App() {
 
       {/* Inspection (main feature) */}
       <Route path="/inspect" element={withLayout(<Inspection session={session} />)} />
+      <Route path="/repair" element={withLayout(<Repair session={session} />)} />
       {session.role === "admin" && <Route path="/reports" element={withLayout(<Reports />)} />}
 
       {/* Torque Job: kept in the code, hidden from the menus */}

@@ -14,10 +14,12 @@ import {
   timeOf,
   watermarkImage,
 } from "../../lib/inspection";
-import { QUEUE_CHANGED, enqueue, listQueue, type QueuedInspection, type QueuedPhoto } from "../../lib/offlineQueue";
+import { QUEUE_CHANGED, enqueue, listInspections, type QueuedInspection, type QueuedPhoto } from "../../lib/offlineQueue";
 import { SYNCED_EVENT } from "../../lib/sync";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "./Inspection.module.scss";
+import ModeSwitch from "../ModeSwitch/ModeSwitch";
+import WaitingChecks from "./WaitingChecks";
 
 interface Props {
   session: Session;
@@ -163,7 +165,7 @@ export default function Inspection({ session }: Props) {
   // Checks saved on this phone but not uploaded yet
   useEffect(() => {
     const load = () => {
-      listQueue()
+      listInspections()
         .then(setPending)
         .catch(() => {});
     };
@@ -286,6 +288,15 @@ export default function Inspection({ session }: Props) {
     );
 
   const existing = trackerNo !== null ? statuses.get(trackerNo) : undefined;
+
+  // Checks for the chosen tracker that are saved on this phone but not uploaded yet
+  const waitingChecks = useMemo(
+    () =>
+      pending.filter(
+        (p) => p.username === session.username && p.site === site && p.block === blockNo && p.tracker === trackerNo,
+      ),
+    [pending, session.username, site, blockNo, trackerNo],
+  );
 
   // Trackers checked on this phone in this block today that are not uploaded yet: tracker -> broken panels
   const waitingHere = new Map<number, number>();
@@ -444,6 +455,8 @@ export default function Inspection({ session }: Props) {
         )}
       </header>
 
+      <ModeSwitch active="inspect" />
+
       <div className={styles.live} role="status" aria-live="polite">
         {toast && (
           <p className={styles.toast}>
@@ -503,6 +516,8 @@ export default function Inspection({ session }: Props) {
             <span className={styles.ticketBlock}>Block {blockNo}</span>
             <span className={styles.ticketTracker}>Tracker {trackerNo}</span>
           </div>
+
+          <WaitingChecks checks={waitingChecks} onView={setViewing} />
 
           {existing && (
             <section className={styles.recorded} aria-labelledby="rec">

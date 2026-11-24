@@ -1,0 +1,25 @@
+.switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-separator-3);
+
+  button {
+    min-height: 48px;
+    border: 0;
+    border-radius: calc(var(--radius-md) - 4px);
+    background: transparent;
+    color: var(--color-label-secondary);
+    font: inherit;
+    font-size: var(--text-headline, 1.05rem);
+    font-weight: 600;
+
+    &[aria-selected="true"] {
+      background: var(--color-brand);
+      color: var(--color-brand-text);
+    }
+  }
+}

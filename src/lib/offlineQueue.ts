@@ -37,6 +37,36 @@ export interface QueuedInspection {
   error?: string; // set when the server refused it; needs a person to look at it
 }
 
+/** One repaired panel: fixed or replaced, with its before and after photos. */
+export interface QueuedRepairPanel {
+  panel: number;
+  action: "fix" | "replace";
+  notes: string;
+  before: QueuedPhoto[];
+  after: QueuedPhoto[];
+}
+
+/** A repair job saved on the phone. Waits in the same queue as inspections. */
+export interface QueuedRepair {
+  kind: "repair";
+  id: string;
+  username: string;
+  name: string;
+  site: string;
+  block: number;
+  tracker: number;
+  work_date: string;
+  inspected_at: string; // ISO time the repair was done
+  panels: QueuedRepairPanel[];
+  createdAt: number;
+  attempts: number;
+  error?: string;
+}
+
+export type QueuedItem = QueuedInspection | QueuedRepair;
+
+export const isRepair = (i: QueuedItem): i is QueuedRepair => (i as QueuedRepair).kind === "repair";
+
 export const QUEUE_CHANGED = "lumico:queue-changed";
 
 const DB_NAME = "lumico-offline";
@@ -84,7 +114,7 @@ async function run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) =>
 const changed = () => window.dispatchEvent(new Event(QUEUE_CHANGED));
 
 /** Store a new inspection on the phone and tell the app (which then tries to upload it). */
-export async function enqueue(item: QueuedInspection): Promise<void> {
+export async function enqueue(item: QueuedItem): Promise<void> {
   try {
     await run("readwrite", (s) => s.put(item));
   } catch {
@@ -93,14 +123,19 @@ export async function enqueue(item: QueuedInspection): Promise<void> {
   changed();
 }
 
-/** Everything waiting on this phone, oldest first. */
-export async function listQueue(): Promise<QueuedInspection[]> {
-  const all = await run<QueuedInspection[]>("readonly", (s) => s.getAll());
+/** Everything waiting on this phone (inspections and repairs), oldest first. */
+export async function listQueue(): Promise<QueuedItem[]> {
+  const all = await run<QueuedItem[]>("readonly", (s) => s.getAll());
   return all.sort((a, b) => a.createdAt - b.createdAt);
 }
 
+/** Only the inspections waiting on this phone. */
+export async function listInspections(): Promise<QueuedInspection[]> {
+  return (await listQueue()).filter((i): i is QueuedInspection => !isRepair(i));
+}
+
 /** Update an item (photo keys, attempts, error). Does not announce a change. */
-export async function saveItem(item: QueuedInspection): Promise<void> {
+export async function saveItem(item: QueuedItem): Promise<void> {
   await run("readwrite", (s) => s.put(item));
 }
 
