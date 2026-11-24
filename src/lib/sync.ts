@@ -5,7 +5,15 @@
 // and retried if it stops moving data, and a newer run can replace a stuck one (syncQueue with
 // force = true), for example when the phone comes back from the background.
 import { ApiError, apiJson } from "../api";
-import { isRepair, listQueue, removeItem, saveItem, type QueuedItem, type QueuedPhoto, type QueuedRepair } from "./offlineQueue";
+import {
+  isRepair,
+  listQueue,
+  removeItem,
+  saveItem,
+  type QueuedItem,
+  type QueuedPhoto,
+  type QueuedRepair,
+} from "./offlineQueue";
 
 export const SYNCED_EVENT = "lumico:synced";
 export const PROGRESS_EVENT = "lumico:sync-progress";
@@ -28,12 +36,17 @@ const MAX_ATTEMPTS = 10; // after this many failures a person has to look at it
 
 // Exported so tests can shorten them
 export const timing = {
-  stallMs: 25_000, // a photo that moves no data for this long is dropped and retried
+  startMs: 10_000, // a photo that has not started sending after this long is dropped and retried at once
+  stallMs: 25_000, // a photo that has started but then moves no data for this long is dropped and retried
+  presignMs: 10_000, // longest the request for a photo's upload address may take
+  tries: 3, // how many times one photo is tried straight away before the whole run waits and retries
   apiMs: 20_000, // longest a small request (upload address, saving the record) may take
 };
 
 function emit(detail: SyncProgress | null) {
-  window.dispatchEvent(new CustomEvent<SyncProgress | null>(PROGRESS_EVENT, { detail }));
+  window.dispatchEvent(
+    new CustomEvent<SyncProgress | null>(PROGRESS_EVENT, { detail }),
+  );
 }
 
 export const photosOf = (item: QueuedItem): QueuedPhoto[] =>
@@ -43,11 +56,20 @@ export const photosOf = (item: QueuedItem): QueuedPhoto[] =>
 
 function report(item: QueuedItem, stage: SyncProgress["stage"], part = 0) {
   const all = photosOf(item);
-  emit({ id: item.id, done: all.filter((p) => p.key).length, total: all.length, part, stage });
+  emit({
+    id: item.id,
+    done: all.filter((p) => p.key).length,
+    total: all.length,
+    part,
+    stage,
+  });
 }
 
 /** An abort signal that also fires after ms, and when the parent run is replaced. */
-function limit(parent: AbortSignal, ms: number): { signal: AbortSignal; clear: () => void } {
+function limit(
+  parent: AbortSignal,
+  ms: number,
+): { signal: AbortSignal; clear: () => void } {
   const ctrl = new AbortController();
   const stop = () => ctrl.abort();
   if (parent.aborted) ctrl.abort();
@@ -62,8 +84,13 @@ function limit(parent: AbortSignal, ms: number): { signal: AbortSignal; clear: (
   };
 }
 
-async function call<T>(path: string, init: RequestInit, parent: AbortSignal): Promise<T> {
-  const l = limit(parent, timing.apiMs);
+async function call<T>(
+  path: string,
+  init: RequestInit,
+  parent: AbortSignal,
+  ms = timing.apiMs,
+): Promise<T> {
+  const l = limit(parent, ms);
   try {
     return await apiJson<T>(path, { ...init, signal: l.signal });
   } finally {
@@ -72,13 +99,22 @@ async function call<T>(path: string, init: RequestInit, parent: AbortSignal): Pr
 }
 
 /** PUT a photo straight to S3 (no login header: the address is already signed), reporting progress. */
-function putPhoto(url: string, blob: Blob, parent: AbortSignal, onProgress: (sent: number, total: number) => void): Promise<void> {
+function putPhoto(
+  url: string,
+  blob: Blob,
+  parent: AbortSignal,
+  onProgress: (sent: number, total: number) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     let idle: ReturnType<typeof setTimeout> | undefined;
+    let started = false;
     const kick = () => {
       clearTimeout(idle);
-      idle = setTimeout(() => xhr.abort(), timing.stallMs);
+      idle = setTimeout(
+        () => xhr.abort(),
+        started ? timing.stallMs : timing.startMs,
+      );
     };
     const onParentAbort = () => xhr.abort();
     const finish = (err?: Error) => {
@@ -91,10 +127,14 @@ function putPhoto(url: string, blob: Blob, parent: AbortSignal, onProgress: (sen
     xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", "image/jpeg");
     xhr.upload.onprogress = (e) => {
+      started = true;
       kick();
       if (e.lengthComputable) onProgress(e.loaded, e.total);
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? finish() : finish(new Error("A photo did not upload.")));
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? finish()
+        : finish(new Error("A photo did not upload."));
     xhr.onerror = () => finish(new Error("No connection."));
     xhr.onabort = () => finish(new Error("Upload stopped."));
     kick();
@@ -102,7 +142,33 @@ function putPhoto(url: string, blob: Blob, parent: AbortSignal, onProgress: (sen
   });
 }
 
-async function uploadPhoto(item: QueuedItem, photo: QueuedPhoto, signal: AbortSignal): Promise<string> {
+/** One photo, tried a few times straight away: a connection that hangs at the start usually works on a fresh try. */
+async function uploadPhoto(
+  item: QueuedItem,
+  photo: QueuedPhoto,
+  signal: AbortSignal,
+): Promise<string> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await uploadPhotoOnce(item, photo, signal);
+    } catch (err) {
+      const refused =
+        err instanceof ApiError &&
+        err.status >= 400 &&
+        err.status < 500 &&
+        err.status !== 408 &&
+        err.status !== 429;
+      if (signal.aborted || refused || attempt >= timing.tries) throw err;
+      report(item, "photos"); // back to the start of this photo, then go again
+    }
+  }
+}
+
+async function uploadPhotoOnce(
+  item: QueuedItem,
+  photo: QueuedPhoto,
+  signal: AbortSignal,
+): Promise<string> {
   if (photo.key) return photo.key;
   const { uploadURL, key } = await call<{ uploadURL: string; key: string }>(
     `/uploads/presign?${new URLSearchParams({
@@ -113,6 +179,7 @@ async function uploadPhoto(item: QueuedItem, photo: QueuedPhoto, signal: AbortSi
     })}`,
     {},
     signal,
+    timing.presignMs,
   );
   let last = 0;
   await putPhoto(uploadURL, photo.blob, signal, (sent, total) => {
@@ -128,15 +195,26 @@ async function uploadPhoto(item: QueuedItem, photo: QueuedPhoto, signal: AbortSi
   return key;
 }
 
-async function uploadRepair(item: QueuedRepair, signal: AbortSignal): Promise<void> {
+async function uploadRepair(
+  item: QueuedRepair,
+  signal: AbortSignal,
+): Promise<void> {
   report(item, "photos");
   const panels = [];
   for (const p of item.panels) {
     const before: string[] = [];
     const after: string[] = [];
-    for (const photo of p.before) before.push(await uploadPhoto(item, photo, signal));
-    for (const photo of p.after) after.push(await uploadPhoto(item, photo, signal));
-    panels.push({ panel: p.panel, action: p.action, notes: p.notes, before_keys: before, after_keys: after });
+    for (const photo of p.before)
+      before.push(await uploadPhoto(item, photo, signal));
+    for (const photo of p.after)
+      after.push(await uploadPhoto(item, photo, signal));
+    panels.push({
+      panel: p.panel,
+      action: p.action,
+      notes: p.notes,
+      before_keys: before,
+      after_keys: after,
+    });
   }
   report(item, "saving");
   await call(
@@ -164,14 +242,28 @@ async function uploadOne(item: QueuedItem, signal: AbortSignal): Promise<void> {
   const panels = [];
   for (const p of item.panels) {
     const keys: string[] = [];
-    for (const photo of p.photos) keys.push(await uploadPhoto(item, photo, signal));
-    panels.push({ panel: p.panel, defects: p.defects, notes: p.notes, photo_keys: [...p.kept, ...keys] });
+    for (const photo of p.photos)
+      keys.push(await uploadPhoto(item, photo, signal));
+    panels.push({
+      panel: p.panel,
+      defects: p.defects,
+      notes: p.notes,
+      photo_keys: [...p.kept, ...keys],
+    });
   }
   const okKeys: string[] = [];
-  for (const photo of item.okPhotos) okKeys.push(await uploadPhoto(item, photo, signal));
+  for (const photo of item.okPhotos)
+    okKeys.push(await uploadPhoto(item, photo, signal));
 
   report(item, "saving");
-  const detail = item.panels.length > 0 ? { panels } : { panels: [], notes: item.okNotes, photo_keys: [...item.okKept, ...okKeys] };
+  const detail =
+    item.panels.length > 0
+      ? { panels }
+      : {
+          panels: [],
+          notes: item.okNotes,
+          photo_keys: [...item.okKept, ...okKeys],
+        };
 
   await call(
     "/inspections",
@@ -198,7 +290,10 @@ let current: { ctrl: AbortController } | null = null;
  * Upload everything waiting for this user, oldest first.
  * force = true replaces a run that is hanging (no signal, or the phone paused the app) with a fresh one.
  */
-export async function syncQueue(username: string, force = false): Promise<SyncOutcome> {
+export async function syncQueue(
+  username: string,
+  force = false,
+): Promise<SyncOutcome> {
   const out: SyncOutcome = { uploaded: 0, stopped: null };
   if (current) {
     if (!force) return out;
@@ -209,7 +304,9 @@ export async function syncQueue(username: string, force = false): Promise<SyncOu
   const signal = mine.ctrl.signal;
 
   try {
-    const items = (await listQueue()).filter((i) => i.username === username && !i.error);
+    const items = (await listQueue()).filter(
+      (i) => i.username === username && !i.error,
+    );
     for (const item of items) {
       if (signal.aborted) return out; // replaced by a newer run
       try {
@@ -224,7 +321,12 @@ export async function syncQueue(username: string, force = false): Promise<SyncOu
           await saveItem(item);
           return out;
         }
-        const refused = err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429;
+        const refused =
+          err instanceof ApiError &&
+          err.status >= 400 &&
+          err.status < 500 &&
+          err.status !== 408 &&
+          err.status !== 429;
         if (refused) {
           item.error = (err as ApiError).message; // the server will never accept this one as it is
           await saveItem(item);
@@ -232,7 +334,8 @@ export async function syncQueue(username: string, force = false): Promise<SyncOu
         }
         // No signal, a stalled upload or a server hiccup: keep it and try again later.
         item.lastError = err instanceof Error ? err.message : "Upload failed.";
-        if (item.attempts >= MAX_ATTEMPTS) item.error = "This keeps failing to upload.";
+        if (item.attempts >= MAX_ATTEMPTS)
+          item.error = "This keeps failing to upload.";
         await saveItem(item);
         out.stopped = "offline";
         return out;
