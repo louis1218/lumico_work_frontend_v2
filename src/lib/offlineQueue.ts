@@ -35,6 +35,7 @@ export interface QueuedInspection {
   createdAt: number;
   attempts: number;
   error?: string; // set when the server refused it; needs a person to look at it
+  lastError?: string; // why the latest upload try failed (shown while it keeps retrying)
 }
 
 /** One repaired panel: fixed or replaced, with its before and after photos. */
@@ -61,6 +62,7 @@ export interface QueuedRepair {
   createdAt: number;
   attempts: number;
   error?: string;
+  lastError?: string;
 }
 
 export type QueuedItem = QueuedInspection | QueuedRepair;

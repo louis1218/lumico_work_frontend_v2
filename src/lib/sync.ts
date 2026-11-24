@@ -231,6 +231,7 @@ export async function syncQueue(username: string, force = false): Promise<SyncOu
           continue; // later items may still be fine
         }
         // No signal, a stalled upload or a server hiccup: keep it and try again later.
+        item.lastError = err instanceof Error ? err.message : "Upload failed.";
         if (item.attempts >= MAX_ATTEMPTS) item.error = "This keeps failing to upload.";
         await saveItem(item);
         out.stopped = "offline";

@@ -193,18 +193,19 @@ export default function SyncStatus({ session }: Props) {
   const doneThisRound = Math.max(0, batchTotal - waiting.length);
 
   const status = (item: QueuedItem) => {
+    const retry = item.attempts > 0 ? ` · try ${item.attempts + 1}` : "";
     if (progress?.id === item.id) {
       if (progress.stage === "saving") return { text: "Saving…", pct: 100, live: true };
       const pct = progress.total > 0 ? Math.round(((progress.done + progress.part) / progress.total) * 100) : 0;
       const n = Math.min(progress.done + 1, progress.total);
       return {
-        text: progress.total > 0 ? `Photo ${n} of ${progress.total} · ${pct}%` : "Uploading…",
+        text: progress.total > 0 ? `Photo ${n} of ${progress.total} · ${pct}%${retry}` : "Uploading…",
         pct,
         live: true,
       };
     }
-    if (busy) return { text: "Waiting in line", pct: 0, live: false };
-    return { text: "Not uploaded yet", pct: 0, live: false };
+    if (busy) return { text: `Waiting in line${retry}`, pct: 0, live: false };
+    return { text: `Not uploaded yet${retry}`, pct: 0, live: false };
   };
 
   return (
@@ -215,7 +216,7 @@ export default function SyncStatus({ session }: Props) {
             <FaCloudUploadAlt aria-hidden="true" className={styles.icon} />
             <p className={styles.text}>
               <strong>
-                {waiting.length} {waiting.length === 1 ? "inspection" : "inspections"}
+                {waiting.length} {waiting.every(isRepair) ? (waiting.length === 1 ? "repair" : "repairs") : waiting.length === 1 ? "job" : "jobs"}
               </strong>{" "}
               saved on this phone, not uploaded yet.{" "}
               <span className={styles.sub}>
@@ -261,6 +262,7 @@ export default function SyncStatus({ session }: Props) {
                         Block {item.block} · Tracker {item.tracker}
                       </strong>
                       <span className={styles.rowSub}>{describe(item)}</span>
+                      {item.attempts > 0 && item.lastError && <span className={styles.rowSub}>Last try failed: {item.lastError}</span>}
                     </div>
                     <div className={styles.rowStatus}>
                       <span>{s.text}</span>
