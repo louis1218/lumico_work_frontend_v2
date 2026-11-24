@@ -17,6 +17,10 @@
     font-size: var(--text-headline, 1.05rem);
     font-weight: 600;
 
+    &:disabled {
+      opacity: 0.4;
+    }
+
     &[aria-selected="true"] {
       background: var(--color-brand);
       color: var(--color-brand-text);

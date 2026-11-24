@@ -9,6 +9,7 @@ import TorqueJobForm from "./components/TorqueJobForm/TorqueJobForm";
 import Layout from "./components/Layout/Layout";
 import Inspection from "./components/Inspection/Inspection";
 import Repair from "./components/Repair/Repair";
+import { INSPECT_ENABLED } from "./lib/features";
 import Reports from "./components/Reports/Reports";
 import SyncStatus from "./components/SyncStatus/SyncStatus";
 import { api, apiFetch, SESSION_EXPIRED_EVENT } from "./api";
@@ -194,7 +195,7 @@ export default function App() {
       {/* Menu — no Layout (full page, has its own header) */}
 
       {/* Inspection (main feature) */}
-      <Route path="/inspect" element={withLayout(<Inspection session={session} />)} />
+      <Route path="/inspect" element={INSPECT_ENABLED ? withLayout(<Inspection session={session} />) : <Navigate to="/repair" replace />} />
       <Route path="/repair" element={withLayout(<Repair session={session} />)} />
       {session.role === "admin" && <Route path="/reports" element={withLayout(<Reports />)} />}
 
