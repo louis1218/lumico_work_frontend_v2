@@ -3,6 +3,7 @@ import { FaCloudUploadAlt, FaCheck, FaChevronDown, FaChevronUp, FaExclamationTri
 import type { Session } from "../../App";
 import { timeOf } from "../../lib/inspection";
 import { QUEUE_CHANGED, isRepair, listQueue, removeItem, requestPersistence, saveItem, type QueuedItem } from "../../lib/offlineQueue";
+import { isDirty } from "../../lib/dirty";
 import { PROGRESS_EVENT, photosOf, syncQueue, type SyncOutcome, type SyncProgress } from "../../lib/sync";
 import styles from "./SyncStatus.module.scss";
 
@@ -10,6 +11,7 @@ interface Props {
   session: Session;
 }
 
+const RELOAD_KEY = "lumico:autoReload";
 const STALLED_AFTER_MS = 20_000; // no sign of progress for this long = "taking long"
 const AWAY_LONG_MS = 5_000; // the app was in the background at least this long
 
@@ -29,6 +31,7 @@ export default function SyncStatus({ session }: Props) {
   const [busy, setBusy] = useState(false);
   const [stalled, setStalled] = useState(false);
   const [stopped, setStopped] = useState<SyncOutcome["stopped"]>(null);
+  const [fails, setFails] = useState(0); // upload rounds in a row that failed while the phone says it is online
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [batchTotal, setBatchTotal] = useState(0); // how many were waiting when this upload round began
   const [open, setOpen] = useState(true);
@@ -58,7 +61,10 @@ export default function SyncStatus({ session }: Props) {
         const waitingNow = (await listQueue()).filter((i) => i.username === session.username && !i.error);
         if (round === roundRef.current) setBatchTotal(waitingNow.length);
         const result = await syncQueue(session.username, force);
-        if (round === roundRef.current) setStopped(result.stopped);
+        if (round === roundRef.current) {
+          setStopped(result.stopped);
+          setFails((n) => (result.stopped === "offline" && navigator.onLine ? n + 1 : 0));
+        }
       } catch {
         if (round === roundRef.current) setStopped("offline");
       } finally {
@@ -122,6 +128,19 @@ export default function SyncStatus({ session }: Props) {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh, trySync, restart]);
+
+  // The page can lose its connection for good after the phone changes network (a reload always
+  // fixes it). So reload by itself, but never while a form is half filled in and at most every 2 minutes.
+  useEffect(() => {
+    if (fails < 2 || busy || !navigator.onLine || isDirty()) return;
+    try {
+      if (Date.now() - Number(sessionStorage.getItem(RELOAD_KEY) ?? 0) < 120_000) return;
+      sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+    } catch {
+      return;
+    }
+    window.location.reload();
+  }, [fails, busy]);
 
   // Keep trying while anything is waiting (a phone can be "online" with no real signal)
   const waiting = items.filter((i) => i.username === session.username && !i.error);
@@ -229,7 +248,9 @@ export default function SyncStatus({ session }: Props) {
                   : stopped === "login"
                     ? "Your login has expired. Log in again to upload."
                     : stopped === "offline"
-                      ? "No signal. They upload automatically when you are back online. Keep the app installed and do not log out."
+                      ? fails >= 2
+                        ? "The phone says it is online but the upload cannot connect. The app reloads itself to reconnect when no form is open. Or tap Reload app. Your repairs are safe on this phone."
+                        : "No signal. They upload automatically when you are back online. Keep the app installed and do not log out."
                       : ""}
               </span>
             </p>
@@ -241,9 +262,16 @@ export default function SyncStatus({ session }: Props) {
                   </button>
                 )
               ) : (
-                <button type="button" className={styles.btn} onClick={trySync}>
-                  Upload now
-                </button>
+                <>
+                  <button type="button" className={styles.btn} onClick={trySync}>
+                    Upload now
+                  </button>
+                  {fails >= 2 && (
+                    <button type="button" className={styles.btn} onClick={() => window.location.reload()}>
+                      Reload app
+                    </button>
+                  )}
+                </>
               )}
               <button type="button" className={styles.toggle} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Hide list" : "Show list"}>
                 {open ? <FaChevronUp aria-hidden="true" /> : <FaChevronDown aria-hidden="true" />}

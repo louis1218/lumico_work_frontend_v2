@@ -4,6 +4,7 @@ import type { Session } from "../../App";
 import { apiJson } from "../../api";
 import { FALLBACK_OPTIONS, PHOTO_BASE, type InspectionOptions, compressImage, dateTimeOf, fullName, localDate, longDate, watermarkImage } from "../../lib/inspection";
 import { QUEUE_CHANGED, enqueue, listRepairs, type QueuedPhoto, type QueuedRepair } from "../../lib/offlineQueue";
+import { setDirty } from "../../lib/dirty";
 import { SYNCED_EVENT } from "../../lib/sync";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "../Inspection/Inspection.module.scss"; // same look as the inspection form
@@ -81,6 +82,12 @@ export default function Repair({ session }: Props) {
   const topRef = useRef<HTMLDivElement>(null);
   const allPhotosRef = useRef<Photo[]>([]);
   allPhotosRef.current = entries.flatMap((e) => [...e.before, ...e.after]);
+
+  // Tell the app when this form holds something unsaved (it will not reload itself then)
+  useEffect(() => {
+    setDirty("repair", saving || adding || entries.some((e) => e.panel || e.action || e.notes || e.before.length || e.after.length));
+    return () => setDirty("repair", false);
+  }, [entries, saving, adding]);
 
   const blockNo = block ? Number(block) : null;
   const trackerNo = tracker ? Number(tracker) : null;

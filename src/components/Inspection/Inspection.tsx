@@ -15,6 +15,7 @@ import {
   watermarkImage,
 } from "../../lib/inspection";
 import { QUEUE_CHANGED, enqueue, listInspections, type QueuedInspection, type QueuedPhoto } from "../../lib/offlineQueue";
+import { setDirty } from "../../lib/dirty";
 import { SYNCED_EVENT } from "../../lib/sync";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "./Inspection.module.scss";
@@ -106,6 +107,12 @@ export default function Inspection({ session }: Props) {
   const topRef = useRef<HTMLDivElement>(null);
   const allPhotosRef = useRef<Photo[]>([]);
   allPhotosRef.current = [...okPhotos, ...entries.flatMap((e) => e.photos)];
+
+  // Tell the app when this form holds something unsaved (it will not reload itself then)
+  useEffect(() => {
+    setDirty("inspection", saving || adding || condition !== null || entries.length > 0 || okPhotos.length > 0 || okNotes.trim() !== "");
+    return () => setDirty("inspection", false);
+  }, [saving, adding, condition, entries, okPhotos, okNotes]);
 
   const blockNo = block ? Number(block) : null;
   const trackerNo = tracker ? Number(tracker) : null;
