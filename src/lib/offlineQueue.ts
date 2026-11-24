@@ -129,6 +129,11 @@ export async function listQueue(): Promise<QueuedItem[]> {
   return all.sort((a, b) => a.createdAt - b.createdAt);
 }
 
+/** Only the repairs waiting on this phone. */
+export async function listRepairs(): Promise<QueuedRepair[]> {
+  return (await listQueue()).filter(isRepair);
+}
+
 /** Only the inspections waiting on this phone. */
 export async function listInspections(): Promise<QueuedInspection[]> {
   return (await listQueue()).filter((i): i is QueuedInspection => !isRepair(i));

@@ -163,7 +163,7 @@ export default function App() {
               onComplete={(newSession: Session) => {
                 setLoginUser(loadLoginUser());
                 setSession(newSession);
-                navigate("/menu");
+                navigate("/repair");
               }}
             />
           }
@@ -259,7 +259,7 @@ export default function App() {
         )}
       />
 
-      <Route path="*" element={<Navigate to="/menu" replace />} />
+      <Route path="*" element={<Navigate to="/repair" replace />} />
     </Routes>
   );
 }

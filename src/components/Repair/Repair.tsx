@@ -2,12 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "reac
 import { FaCamera, FaCheck, FaImages, FaPlus, FaTimes } from "react-icons/fa";
 import type { Session } from "../../App";
 import { apiJson } from "../../api";
-import { FALLBACK_OPTIONS, type InspectionOptions, compressImage, dateTimeOf, localDate, longDate, watermarkImage } from "../../lib/inspection";
-import { enqueue, type QueuedPhoto, type QueuedRepair } from "../../lib/offlineQueue";
+import { FALLBACK_OPTIONS, PHOTO_BASE, type InspectionOptions, compressImage, dateTimeOf, fullName, localDate, longDate, watermarkImage } from "../../lib/inspection";
+import { QUEUE_CHANGED, enqueue, listRepairs, type QueuedPhoto, type QueuedRepair } from "../../lib/offlineQueue";
 import { SYNCED_EVENT } from "../../lib/sync";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "../Inspection/Inspection.module.scss"; // same look as the inspection form
 import ModeSwitch from "../ModeSwitch/ModeSwitch";
+import WaitingRepairs from "./WaitingRepairs";
 
 interface Props {
   session: Session;
@@ -39,6 +40,20 @@ interface MySummary {
   trackers: number;
 }
 
+/** A repair already recorded on the server */
+interface Done {
+  tracker: number;
+  panel: number;
+  action: "fix" | "replace";
+  notes: string;
+  before_keys: string[];
+  after_keys: string[];
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  repaired_at: string;
+}
+
 const MAX_PHOTOS = 10;
 const LAST_BLOCK_KEY = "lumico:lastBlock";
 const newId = () => crypto.randomUUID();
@@ -55,6 +70,8 @@ export default function Repair({ session }: Props) {
   const [tracker, setTracker] = useState("");
   const [entries, setEntries] = useState<Entry[]>([blankEntry()]);
   const [mine, setMine] = useState<MySummary | null>(null);
+  const [done, setDone] = useState<Done[]>([]); // already uploaded, this block
+  const [pending, setPending] = useState<QueuedRepair[]>([]); // saved on this phone, not uploaded yet
   const [adding, setAdding] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -79,6 +96,47 @@ export default function Repair({ session }: Props) {
   }, [site, today]);
 
   useEffect(loadMine, [loadMine]);
+
+  const loadBlock = useCallback(
+    (b: number) =>
+      apiJson<{ repairs: Done[] }>(`/repairs/block?${new URLSearchParams({ site, block: String(b) })}`)
+        .then((r) => r.repairs)
+        .catch(() => [] as Done[]),
+    [site],
+  );
+
+  useEffect(() => {
+    if (blockNo === null) {
+      setDone([]);
+      return;
+    }
+    let cancelled = false;
+    loadBlock(blockNo).then((r) => !cancelled && setDone(r));
+    return () => {
+      cancelled = true;
+    };
+  }, [blockNo, loadBlock]);
+
+  // Repairs saved on this phone but not uploaded yet
+  useEffect(() => {
+    const load = () => {
+      listRepairs()
+        .then(setPending)
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener(QUEUE_CHANGED, load);
+    return () => window.removeEventListener(QUEUE_CHANGED, load);
+  }, []);
+
+  // When waiting repairs finish uploading, show the server's up-to-date list
+  useEffect(() => {
+    const refresh = () => {
+      if (blockNo !== null) loadBlock(blockNo).then(setDone);
+    };
+    window.addEventListener(SYNCED_EVENT, refresh);
+    return () => window.removeEventListener(SYNCED_EVENT, refresh);
+  }, [blockNo, loadBlock]);
 
   useEffect(() => {
     window.addEventListener(SYNCED_EVENT, loadMine);
@@ -146,6 +204,18 @@ export default function Repair({ session }: Props) {
         return { ...e, [side]: e[side].filter((p) => p.id !== photoId) };
       }),
     );
+
+  // Panels on this tracker that already have a repair (uploaded, or waiting on this phone)
+  const doneHere = done.filter((d) => d.tracker === trackerNo);
+  const waitingRepairs = pending.filter((p) => p.username === session.username && p.site === site && p.block === blockNo && p.tracker === trackerNo);
+  const repairedPanels = new Set([...doneHere.map((d) => String(d.panel)), ...waitingRepairs.flatMap((w) => w.panels.map((p) => String(p.panel)))]);
+
+  // Trackers in this block with a repair: uploaded or still on this phone
+  const repairedTrackers = new Map<number, "done" | "phone">();
+  for (const p of pending) {
+    if (p.username === session.username && p.site === site && p.block === blockNo) repairedTrackers.set(p.tracker, "phone");
+  }
+  for (const d of done) repairedTrackers.set(d.tracker, "done");
 
   const usedPanels = (exceptId: string) => new Set(entries.filter((e) => e.id !== exceptId && e.panel).map((e) => e.panel));
 
@@ -323,7 +393,15 @@ export default function Repair({ session }: Props) {
             searchPlaceholder="Type a number to find a tracker"
             disabled={!block}
             placeholder={block ? "Select tracker" : "Pick a block first"}
-            options={Array.from({ length: options.trackers_per_block }, (_, i) => ({ value: String(i + 1), label: `Tracker ${i + 1}` }))}
+            options={Array.from({ length: options.trackers_per_block }, (_, i) => {
+              const state = repairedTrackers.get(i + 1);
+              return {
+                value: String(i + 1),
+                label: `Tracker ${i + 1}`,
+                note: state === "done" ? "repaired" : state === "phone" ? "on this phone" : undefined,
+                tone: state ? ("ok" as const) : undefined,
+              };
+            })}
             onChange={changeTracker}
           />
         </div>
@@ -335,6 +413,47 @@ export default function Repair({ session }: Props) {
             <span className={styles.ticketBlock}>Block {blockNo}</span>
             <span className={styles.ticketTracker}>Tracker {trackerNo}</span>
           </div>
+
+          <WaitingRepairs repairs={waitingRepairs} onView={setViewing} />
+
+          {doneHere.length > 0 && (
+            <section className={styles.recorded} aria-labelledby="rec">
+              <h2 id="rec" className={styles.recordedTitle}>
+                <FaCheck aria-hidden="true" />
+                Already repaired on this tracker: {doneHere.length} {doneHere.length === 1 ? "panel" : "panels"}
+              </h2>
+              <ul className={styles.recordedList}>
+                {doneHere.map((d) => (
+                  <li key={`${d.panel}-${d.repaired_at}`}>
+                    <div className={styles.recordedHead}>
+                      <strong>Panel {d.panel}</strong>
+                      <span>{d.action === "fix" ? "Fixed" : "Replaced"}</span>
+                    </div>
+                    <p className={styles.recordedBy}>
+                      {fullName(d.first_name, d.last_name, d.username)}, {dateTimeOf(d.repaired_at)}
+                    </p>
+                    {d.notes && <p className={styles.recordedNote}>{d.notes}</p>}
+                    {(["before_keys", "after_keys"] as const).map((side) =>
+                      d[side].length > 0 ? (
+                        <div key={side}>
+                          <p className={styles.recordedNote}>{side === "before_keys" ? "Before" : "After"}</p>
+                          <ul className={styles.prevPhotos}>
+                            {d[side].map((k, n) => (
+                              <li key={k}>
+                                <button type="button" onClick={() => setViewing(`${PHOTO_BASE}/${k}`)} aria-label={`Enlarge ${side === "before_keys" ? "before" : "after"} photo ${n + 1} of panel ${d.panel}`}>
+                                  <img src={`${PHOTO_BASE}/${k}`} alt={`Panel ${d.panel} ${side === "before_keys" ? "before" : "after"} ${n + 1}`} loading="lazy" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null,
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section className={styles.section} aria-labelledby="pn">
             <h2 id="pn" className={styles.heading}>
@@ -367,7 +486,7 @@ export default function Repair({ session }: Props) {
                     placeholder="Select panel"
                     options={Array.from({ length: options.panels_per_tracker }, (_, n) => String(n + 1))
                       .filter((v) => !used.has(v))
-                      .map((v) => ({ value: v, label: `Panel ${v}` }))}
+                      .map((v) => ({ value: v, label: `Panel ${v}`, note: repairedPanels.has(v) ? "repaired" : undefined, tone: repairedPanels.has(v) ? ("ok" as const) : undefined }))}
                     onChange={(v) => patchEntry(e.id, { panel: v })}
                   />
 
