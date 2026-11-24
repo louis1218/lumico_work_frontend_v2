@@ -1,9 +1,44 @@
 // Uploads what offlineQueue.ts has stored: photos to S3 first, then the record to the API.
 // Safe to call at any time: it stops quietly when there is no signal and keeps everything.
 import { ApiError, apiJson } from "../api";
-import { listQueue, removeItem, saveItem, type QueuedInspection, type QueuedPhoto } from "./offlineQueue";
+import {
+  listQueue,
+  removeItem,
+  saveItem,
+  type QueuedInspection,
+  type QueuedPhoto,
+} from "./offlineQueue";
 
 export const SYNCED_EVENT = "lumico:synced";
+export const PROGRESS_EVENT = "lumico:sync-progress";
+
+/** What the item being uploaded right now is doing, for the status list. */
+export interface SyncProgress {
+  id: string;
+  done: number; // photos already in S3
+  total: number; // photos in this inspection
+  stage: "photos" | "saving";
+}
+
+function emit(detail: SyncProgress | null) {
+  window.dispatchEvent(
+    new CustomEvent<SyncProgress | null>(PROGRESS_EVENT, { detail }),
+  );
+}
+
+const photosOf = (item: QueuedInspection): QueuedPhoto[] => [
+  ...item.panels.flatMap((p) => p.photos),
+  ...item.okPhotos,
+];
+const report = (item: QueuedInspection, stage: SyncProgress["stage"]) => {
+  const all = photosOf(item);
+  emit({
+    id: item.id,
+    done: all.filter((p) => p.key).length,
+    total: all.length,
+    stage,
+  });
+};
 
 export interface SyncOutcome {
   uploaded: number;
@@ -18,7 +53,10 @@ function timeoutSignal(ms: number): AbortSignal {
   return ctrl.signal;
 }
 
-async function uploadPhoto(item: QueuedInspection, photo: QueuedPhoto): Promise<string> {
+async function uploadPhoto(
+  item: QueuedInspection,
+  photo: QueuedPhoto,
+): Promise<string> {
   if (photo.key) return photo.key;
   const { uploadURL, key } = await apiJson<{ uploadURL: string; key: string }>(
     `/uploads/presign?${new URLSearchParams({
@@ -39,20 +77,36 @@ async function uploadPhoto(item: QueuedInspection, photo: QueuedPhoto): Promise<
   if (!up.ok) throw new Error("A photo did not upload.");
   photo.key = key;
   await saveItem(item); // remember it, so a retry skips this photo
+  report(item, "photos");
   return key;
 }
 
 async function uploadOne(item: QueuedInspection): Promise<void> {
+  report(item, "photos");
   const panels = [];
   for (const p of item.panels) {
     const keys: string[] = [];
     for (const photo of p.photos) keys.push(await uploadPhoto(item, photo));
-    panels.push({ panel: p.panel, defects: p.defects, notes: p.notes, photo_keys: [...p.kept, ...keys] });
+    panels.push({
+      panel: p.panel,
+      defects: p.defects,
+      notes: p.notes,
+      photo_keys: [...p.kept, ...keys],
+    });
   }
   const okKeys: string[] = [];
-  for (const photo of item.okPhotos) okKeys.push(await uploadPhoto(item, photo));
+  for (const photo of item.okPhotos)
+    okKeys.push(await uploadPhoto(item, photo));
 
-  const detail = item.panels.length > 0 ? { panels } : { panels: [], notes: item.okNotes, photo_keys: [...item.okKept, ...okKeys] };
+  report(item, "saving");
+  const detail =
+    item.panels.length > 0
+      ? { panels }
+      : {
+          panels: [],
+          notes: item.okNotes,
+          photo_keys: [...item.okKept, ...okKeys],
+        };
 
   await apiJson("/inspections", {
     method: "POST",
@@ -79,7 +133,9 @@ export async function syncQueue(username: string): Promise<SyncOutcome> {
   running = true;
 
   const work = async () => {
-    const items = (await listQueue()).filter((i) => i.username === username && !i.error);
+    const items = (await listQueue()).filter(
+      (i) => i.username === username && !i.error,
+    );
     for (const item of items) {
       try {
         await uploadOne(item);
@@ -92,14 +148,20 @@ export async function syncQueue(username: string): Promise<SyncOutcome> {
           await saveItem(item);
           return;
         }
-        const refused = err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429;
+        const refused =
+          err instanceof ApiError &&
+          err.status >= 400 &&
+          err.status < 500 &&
+          err.status !== 408 &&
+          err.status !== 429;
         if (refused) {
           item.error = (err as ApiError).message; // the server will never accept this one as it is
           await saveItem(item);
           continue; // later items may still be fine
         }
         // No signal, a slow network or a server hiccup: keep it and try again later.
-        if (item.attempts >= MAX_ATTEMPTS) item.error = "This keeps failing to upload.";
+        if (item.attempts >= MAX_ATTEMPTS)
+          item.error = "This keeps failing to upload.";
         await saveItem(item);
         out.stopped = "offline";
         return;
@@ -110,14 +172,19 @@ export async function syncQueue(username: string): Promise<SyncOutcome> {
   try {
     if (navigator.locks) {
       // Stops two open tabs from uploading the same thing at once
-      await navigator.locks.request("lumico-sync", { ifAvailable: true }, async (lock) => {
-        if (lock) await work();
-      });
+      await navigator.locks.request(
+        "lumico-sync",
+        { ifAvailable: true },
+        async (lock) => {
+          if (lock) await work();
+        },
+      );
     } else {
       await work();
     }
   } finally {
     running = false;
+    emit(null);
   }
 
   if (out.uploaded > 0) window.dispatchEvent(new Event(SYNCED_EVENT));
