@@ -7,7 +7,7 @@ const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) || DEFAU
 export const api = (path: string) => `${API_BASE}${path}`;
 
 /** The login token saved at sign-in, sent as a Bearer header. */
-function authHeader(): Record<string, string> {
+export function authHeader(): Record<string, string> {
   try {
     const session = JSON.parse(localStorage.getItem("userSession") ?? "null");
     return session?.session_token ? { Authorization: `Bearer ${session.session_token}` } : {};

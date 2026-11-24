@@ -4,13 +4,12 @@
 // Nothing here is allowed to hang. Every request has a time limit, a photo upload is dropped
 // and retried if it stops moving data, and a newer run can replace a stuck one (syncQueue with
 // force = true), for example when the phone comes back from the background.
-import { ApiError, apiJson } from "../api";
+import { ApiError, SESSION_EXPIRED_EVENT, api, apiJson, authHeader } from "../api";
 import { log } from "./debugLog";
 import { isRepair, listQueue, removeItem, saveItem, type QueuedItem, type QueuedPhoto, type QueuedRepair } from "./offlineQueue";
 
 export const SYNCED_EVENT = "lumico:synced";
 export const PROGRESS_EVENT = "lumico:sync-progress";
-export const STUCK_EVENT = "lumico:net-stuck"; // a photo upload never started although the phone says it is online
 
 /** What the item being uploaded right now is doing, for the status list. */
 export interface SyncProgress {
@@ -30,11 +29,12 @@ const MAX_ATTEMPTS = 10; // after this many failures a person has to look at it
 
 // Exported so tests can shorten them
 export const timing = {
-  startMs: 10_000, // a photo that has not started sending after this long is dropped and retried at once
+  startMs: 8_000, // a photo that has not started sending after this long is dropped and retried at once
   stallMs: 25_000, // a photo that has started but then moves no data for this long is dropped and retried
   presignMs: 10_000, // longest the request for a photo's upload address may take
   retryDelayMs: 1500, // pause between those quick tries, so a network that is just coming back has a moment
   tries: 3, // how many times one photo is tried straight away before the whole run waits and retries
+  apiFallbackMs: 10 * 60_000, // after S3 fails while online, send photos through the API for this long
   apiMs: 20_000, // longest a small request (upload address, saving the record) may take
 };
 
@@ -81,8 +81,19 @@ async function call<T>(path: string, init: RequestInit, parent: AbortSignal, ms 
   }
 }
 
-/** PUT a photo straight to S3 (no login header: the address is already signed), reporting progress. */
-function putPhoto(url: string, blob: Blob, parent: AbortSignal, onProgress: (sent: number, total: number) => void): Promise<void> {
+/**
+ * Send a request with upload progress. Gives up if nothing starts sending within startMs, or
+ * if sending stops moving for stallMs, so a dead connection can never hang the queue.
+ */
+function send(
+  what: string,
+  method: string,
+  url: string,
+  headers: Record<string, string>,
+  body: Blob | string,
+  parent: AbortSignal,
+  onProgress: (sent: number, total: number) => void,
+): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     let idle: ReturnType<typeof setTimeout> | undefined;
@@ -96,40 +107,62 @@ function putPhoto(url: string, blob: Blob, parent: AbortSignal, onProgress: (sen
       clearTimeout(idle);
       parent.removeEventListener("abort", onParentAbort);
       if (err) reject(err);
-      else resolve();
+      else resolve({ status: xhr.status, text: xhr.responseText });
     };
     parent.addEventListener("abort", onParentAbort, { once: true });
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", "image/jpeg");
+    xhr.open(method, url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     xhr.upload.onprogress = (e) => {
       started = true;
       kick();
       if (e.lengthComputable) onProgress(e.loaded, e.total);
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? finish() : finish(new Error("A photo did not upload.")));
+    xhr.onload = () => finish();
     xhr.onerror = () => {
-      log(`S3 upload error: readyState=${xhr.readyState} status=${xhr.status} started=${started} online=${navigator.onLine}`);
+      log(`${what} error: status=${xhr.status} started=${started} online=${navigator.onLine}`);
       finish(new Error("No connection."));
     };
     xhr.onabort = () => {
-      log(`S3 upload stopped: ${parent.aborted ? "replaced by a newer run" : started ? "no data moving" : "never started"}`);
-      if (!parent.aborted && !started && navigator.onLine) window.dispatchEvent(new Event(STUCK_EVENT));
+      log(`${what} stopped: ${parent.aborted ? "replaced by a newer run" : started ? "no data moving" : "never started"}`);
       finish(new Error("Upload stopped."));
     };
     kick();
-    xhr.send(blob);
+    xhr.send(body);
   });
 }
 
-/** One photo, tried a few times straight away: a connection that hangs at the start usually works on a fresh try. */
+async function toBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+// After a phone loses and regains signal, iOS can keep a dead connection to the S3 address for about
+// a minute, while the API address works at once. So when S3 fails while online, photos go through
+// the API for a while instead (the API writes them to S3).
+export const route = { apiUntil: 0 }; // exported so tests can reset it
+
+/** One photo, tried a few times straight away: straight to S3, or through the API while S3 is stuck. */
 async function uploadPhoto(item: QueuedItem, photo: QueuedPhoto, signal: AbortSignal): Promise<string> {
+  let s3Only = false; // the API cannot take this photo (too big, or an older backend): only S3 will do
   for (let attempt = 1; ; attempt++) {
+    const via = s3Only || Date.now() >= route.apiUntil ? "s3" : "api";
     try {
-      return await uploadPhotoOnce(item, photo, signal);
+      return await uploadPhotoOnce(item, photo, signal, via);
     } catch (err) {
-      const refused = err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429;
-      if (signal.aborted || refused || attempt >= timing.tries) throw err;
-      log(`photo try ${attempt} of ${timing.tries} failed, trying again`);
+      if (signal.aborted) throw err;
+      const status = err instanceof ApiError ? err.status : 0;
+      if (via === "api" && (status === 413 || status === 404)) {
+        s3Only = true;
+      } else if (via === "s3" && !s3Only && navigator.onLine) {
+        route.apiUntil = Date.now() + timing.apiFallbackMs;
+        log("S3 not reachable: sending photos through the API for the next 10 minutes");
+      }
+      const refused = status >= 400 && status < 500 && status !== 408 && status !== 429 && status !== 413 && status !== 404;
+      if (refused) throw err;
+      if (attempt >= timing.tries) throw status === 413 || status === 404 ? new Error("A photo did not upload.") : err; // try again later
+      log(`photo try ${attempt} of ${timing.tries} (${via}) failed, trying again`);
       report(item, "photos"); // back to the start of this photo, then go again
       await new Promise((r) => setTimeout(r, timing.retryDelayMs));
       if (signal.aborted) throw err;
@@ -137,27 +170,46 @@ async function uploadPhoto(item: QueuedItem, photo: QueuedPhoto, signal: AbortSi
   }
 }
 
-async function uploadPhotoOnce(item: QueuedItem, photo: QueuedPhoto, signal: AbortSignal): Promise<string> {
+async function uploadPhotoOnce(item: QueuedItem, photo: QueuedPhoto, signal: AbortSignal, via: "s3" | "api"): Promise<string> {
   if (photo.key) return photo.key;
-  const { uploadURL, key } = await call<{ uploadURL: string; key: string }>(
-    `/uploads/presign?${new URLSearchParams({
-      project: `inspection_${item.site}`,
-      mode: `block${item.block}`,
-      filename: `${isRepair(item) ? "repair_" : ""}t${item.tracker}_${photo.label}_${photo.id.slice(0, 8)}`,
-      contentType: "image/jpeg",
-    })}`,
-    {},
-    signal,
-    timing.presignMs,
-  );
+  const where = {
+    project: `inspection_${item.site}`,
+    mode: `block${item.block}`,
+    filename: `${isRepair(item) ? "repair_" : ""}t${item.tracker}_${photo.label}_${photo.id.slice(0, 8)}`,
+    contentType: "image/jpeg",
+  };
   let last = 0;
-  await putPhoto(uploadURL, photo.blob, signal, (sent, total) => {
+  const onProgress = (sent: number, total: number) => {
     const part = total > 0 ? sent / total : 0;
     if (part - last >= 0.03 || part >= 1) {
       last = part;
       report(item, "photos", part);
     }
-  });
+  };
+
+  let key: string;
+  if (via === "s3") {
+    const signed = await call<{ uploadURL: string; key: string }>(`/uploads/presign?${new URLSearchParams(where)}`, {}, signal, timing.presignMs);
+    const res = await send("S3 upload", "PUT", signed.uploadURL, { "Content-Type": "image/jpeg" }, photo.blob, signal, onProgress);
+    if (res.status < 200 || res.status >= 300) throw new Error("A photo did not upload.");
+    key = signed.key;
+  } else {
+    const body = JSON.stringify({ ...where, data: await toBase64(photo.blob) });
+    const res = await send("API upload", "POST", api("/uploads/photo"), { "Content-Type": "application/json", ...authHeader() }, body, signal, onProgress);
+    let data: { key?: string; error?: string } | null = null;
+    try {
+      data = JSON.parse(res.text);
+    } catch {
+      /* not JSON */
+    }
+    if (res.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    if (res.status < 200 || res.status >= 300 || !data?.key) {
+      log(`API upload refused: ${res.status} ${data?.error ?? ""}`);
+      throw new ApiError(res.status || 0, data?.error ?? "A photo did not upload.");
+    }
+    key = data.key;
+    log("photo sent through the API");
+  }
   photo.key = key;
   await saveItem(item); // remember it, so a retry skips this photo
   report(item, "photos");
