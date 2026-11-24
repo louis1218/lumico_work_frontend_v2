@@ -1,0 +1,77 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-fill);
+  border-radius: var(--radius-md);
+  color: var(--color-label);
+  flex-wrap: wrap;
+}
+
+.bad {
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-fill);
+
+  .icon {
+    color: var(--color-danger);
+  }
+}
+
+.icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+  color: var(--color-warning);
+}
+
+.text {
+  flex: 1 1 200px;
+  margin: 0;
+  font-size: var(--text-footnote);
+  line-height: 1.4;
+}
+
+.sub {
+  color: var(--color-label-secondary);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.btn,
+.btnQuiet {
+  min-height: var(--target-sm);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn {
+  border: 0;
+  background: var(--color-tint);
+  color: var(--color-brand-text);
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.btnQuiet {
+  border: 1px solid var(--color-separator-3);
+  background: transparent;
+  color: var(--color-label);
+}

@@ -52,7 +52,8 @@ export default function LoginAndSessionForm({
 
       const { session_id, session_token, first_name, last_name, login_time, role } = data;
       const name = `${first_name} ${last_name}`;
-      const expiresAt = Date.now() + 1000 * 60 * 60 * 12;
+      // 7 days, so staff can work offline for a few days. Keep equal to SESSION_HOURS on the server (168).
+      const expiresAt = Date.now() + 1000 * 60 * 60 * 24 * 7;
 
       const sessionObject: Session = {
         site,

@@ -14,6 +14,8 @@ import {
   timeOf,
   watermarkImage,
 } from "../../lib/inspection";
+import { QUEUE_CHANGED, enqueue, listQueue, type QueuedInspection, type QueuedPhoto } from "../../lib/offlineQueue";
+import { SYNCED_EVENT } from "../../lib/sync";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "./Inspection.module.scss";
 
@@ -35,7 +37,6 @@ interface Photo {
   id: string;
   file: File;
   url: string;
-  key?: string; // set once uploaded, so a retry never uploads twice
 }
 
 /** One broken panel on the tracker being checked */
@@ -86,6 +87,7 @@ export default function Inspection({ session }: Props) {
   const [tracker, setTracker] = useState<string>("");
   const [statuses, setStatuses] = useState<Map<number, TrackerStatus>>(new Map());
   const [mine, setMine] = useState<MySummary | null>(null);
+  const [pending, setPending] = useState<QueuedInspection[]>([]); // saved on this phone, not uploaded yet
 
   const [condition, setCondition] = useState<Condition>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -157,6 +159,28 @@ export default function Inspection({ session }: Props) {
       cancelled = true;
     };
   }, [blockNo, loadBlock]);
+
+  // Checks saved on this phone but not uploaded yet
+  useEffect(() => {
+    const load = () => {
+      listQueue()
+        .then(setPending)
+        .catch(() => {});
+    };
+    load();
+    window.addEventListener(QUEUE_CHANGED, load);
+    return () => window.removeEventListener(QUEUE_CHANGED, load);
+  }, []);
+
+  // When waiting checks finish uploading, show the server's up-to-date numbers
+  useEffect(() => {
+    const refresh = () => {
+      loadMine();
+      if (blockNo !== null) loadBlock(blockNo).then(setStatuses);
+    };
+    window.addEventListener(SYNCED_EVENT, refresh);
+    return () => window.removeEventListener(SYNCED_EVENT, refresh);
+  }, [loadMine, loadBlock, blockNo]);
 
   // Free the photo previews when leaving the screen
   useEffect(
@@ -262,6 +286,14 @@ export default function Inspection({ session }: Props) {
     );
 
   const existing = trackerNo !== null ? statuses.get(trackerNo) : undefined;
+
+  // Trackers checked on this phone in this block today that are not uploaded yet: tracker -> broken panels
+  const waitingHere = new Map<number, number>();
+  for (const p of pending) {
+    if (p.username === session.username && p.site === site && p.block === blockNo && p.work_date === today) {
+      waitingHere.set(p.tracker, (waitingHere.get(p.tracker) ?? 0) + p.panels.length);
+    }
+  }
   // Every submission is new: what was saved earlier is listed above the form and never edited here.
 
   // The first thing stopping a save, shown under the Save button
@@ -280,71 +312,70 @@ export default function Inspection({ session }: Props) {
   const canSave = problem === "" && !saving && !adding;
 
   // ── Save ──────────────────────────────────────────────────────────────────
-  const uploadPhotos = async (photos: Photo[], lines: string[], label: string, done: { n: number; of: number }): Promise<string[]> => {
-    const keys: string[] = [];
-    for (const [i, photo] of photos.entries()) {
-      if (photo.key) {
-        keys.push(photo.key);
-        continue;
-      }
-      done.n += 1;
-      setProgress(`Uploading photo ${done.n} of ${done.of}…`);
-      const stamped = await watermarkImage(photo.file, lines);
-      const { uploadURL, key } = await apiJson<{ uploadURL: string; key: string }>(
-        `/uploads/presign?${new URLSearchParams({
-          project: `inspection_${site}`,
-          mode: `block${blockNo}`,
-          filename: `t${trackerNo}_${label}_${Date.now()}_${i + 1}`,
-          contentType: "image/jpeg",
-        })}`,
-      );
-      // Straight to S3. No login header here: the upload address is already signed.
-      const up = await fetch(uploadURL, { method: "PUT", headers: { "Content-Type": "image/jpeg" }, body: stamped });
-      if (!up.ok) throw new Error("A photo did not upload. Check your signal and press Save again.");
-      photo.key = key;
-      keys.push(key);
-    }
-    return keys;
-  };
-
+  // Saving never needs signal. The check (photos included) is stored on the phone, then the
+  // SyncStatus bar uploads it to AWS now if there is signal, or later when there is.
   const save = async () => {
     if (!canSave || blockNo === null || trackerNo === null) return;
     setSaving(true);
     setError("");
     try {
-      const stamp = dateTimeOf(new Date().toISOString());
+      const now = new Date();
       const where = `Block ${blockNo} · Tracker ${trackerNo}`;
-      const sub = `${siteName} · ${stamp}`;
-      const total = (condition === "issue" ? entries.flatMap((e) => e.photos) : okPhotos).filter((p) => !p.key).length;
-      const done = { n: 0, of: total };
-      let payload: Record<string, unknown>;
+      const sub = `${siteName} · ${dateTimeOf(now.toISOString())}`;
+      const toPrepare = condition === "issue" ? entries.flatMap((e) => e.photos) : okPhotos;
+      let n = 0;
+
+      // Stamp the location and the time of the check on each photo now, while it is still true
+      const prepare = async (photos: Photo[], lines: string[], label: string): Promise<QueuedPhoto[]> => {
+        const out: QueuedPhoto[] = [];
+        for (const photo of photos) {
+          n += 1;
+          setProgress(`Preparing photo ${n} of ${toPrepare.length}…`);
+          out.push({ id: newId(), blob: await watermarkImage(photo.file, lines), label });
+        }
+        return out;
+      };
+
+      const item: QueuedInspection = {
+        id: newId(),
+        username: session.username,
+        name: session.name,
+        site,
+        block: blockNo,
+        tracker: trackerNo,
+        work_date: localDate(now),
+        inspected_at: now.toISOString(),
+        panels: [],
+        okPhotos: [],
+        okKept: [],
+        okNotes: "",
+        createdAt: Date.now(),
+        attempts: 0,
+      };
 
       if (condition === "issue") {
-        const panels = [];
         for (const e of entries) {
-          const keys = await uploadPhotos(e.photos, [`${where} · Panel ${e.panel}`, sub], `p${e.panel}`, done);
-          panels.push({ panel: Number(e.panel), defects: e.defects, notes: withOther(e), photo_keys: [...e.kept, ...keys] });
+          item.panels.push({
+            panel: Number(e.panel),
+            defects: e.defects,
+            notes: withOther(e),
+            kept: e.kept,
+            photos: await prepare(e.photos, [`${where} · Panel ${e.panel}`, sub], `p${e.panel}`),
+          });
         }
-        payload = { panels };
       } else {
-        const keys = await uploadPhotos(okPhotos, [where, sub], "ok", done);
-        payload = { panels: [], notes: okNotes.trim(), photo_keys: [...okKept, ...keys] };
+        item.okPhotos = await prepare(okPhotos, [where, sub], "ok");
+        item.okKept = okKept;
+        item.okNotes = okNotes.trim();
       }
 
-      setProgress("Saving…");
-      await apiJson("/inspections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ site, block: blockNo, tracker: trackerNo, work_date: today, ...payload }),
-      });
+      setProgress("Saving on this phone…");
+      await enqueue(item);
 
-      const fresh = await loadBlock(blockNo);
-      setStatuses(fresh);
-      loadMine();
       setToast(
         condition === "issue"
-          ? `Saved ${entries.length === 1 ? `panel ${entries[0].panel}` : `${entries.length} panels`} on tracker ${trackerNo}. Add another, or choose a different tracker.`
-          : `Tracker ${trackerNo} saved as no issues.`,
+          ? `Saved ${entries.length === 1 ? `panel ${entries[0].panel}` : `${entries.length} panels`} on tracker ${trackerNo}. It uploads automatically. Add another, or choose a different tracker.`
+          : `Tracker ${trackerNo} saved as no issues. It uploads automatically.`,
       );
       resetForm();
       topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -445,11 +476,20 @@ export default function Inspection({ session }: Props) {
             placeholder={block ? "Select tracker" : "Pick a block first"}
             options={Array.from({ length: perBlock }, (_, i) => {
               const st = statuses.get(i + 1);
+              const waiting = waitingHere.get(i + 1);
               return {
                 value: String(i + 1),
                 label: `Tracker ${i + 1}`,
-                note: st ? (st.broken_panels > 0 ? `${st.broken_panels} broken` : "checked") : undefined,
-                tone: st ? (st.broken_panels > 0 ? ("issue" as const) : ("ok" as const)) : undefined,
+                note: st ? (st.broken_panels > 0 ? `${st.broken_panels} broken` : "checked") : waiting !== undefined ? "on this phone" : undefined,
+                tone: st
+                  ? st.broken_panels > 0
+                    ? ("issue" as const)
+                    : ("ok" as const)
+                  : waiting !== undefined
+                    ? waiting > 0
+                      ? ("issue" as const)
+                      : ("ok" as const)
+                    : undefined,
               };
             })}
             onChange={changeTracker}
@@ -574,12 +614,7 @@ export default function Inspection({ session }: Props) {
                           note: recordedPanels.has(v) ? "recorded" : undefined,
                           tone: recordedPanels.has(v) ? ("issue" as const) : undefined,
                         }))}
-                      onChange={(v) =>
-                        setEntries((prev) =>
-                          // a changed panel number means any uploaded photo needs a fresh stamp
-                          prev.map((x) => (x.id === e.id ? { ...x, panel: v, photos: x.photos.map((p) => ({ ...p, key: undefined })) } : x)),
-                        )
-                      }
+                      onChange={(v) => setEntries((prev) => prev.map((x) => (x.id === e.id ? { ...x, panel: v } : x)))}
                     />
 
                     <div>

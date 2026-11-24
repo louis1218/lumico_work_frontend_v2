@@ -9,6 +9,7 @@ import TorqueJobForm from "./components/TorqueJobForm/TorqueJobForm";
 import Layout from "./components/Layout/Layout";
 import Inspection from "./components/Inspection/Inspection";
 import Reports from "./components/Reports/Reports";
+import SyncStatus from "./components/SyncStatus/SyncStatus";
 import { api, apiFetch, SESSION_EXPIRED_EVENT } from "./api";
 
 // ── Types ─────────────────────────────────────────────────
@@ -182,6 +183,7 @@ export default function App() {
       onLogout={handleLogout}
       logoutLoading={logoutLoading}
     >
+      <SyncStatus session={session} />
       {children}
     </Layout>
   );
