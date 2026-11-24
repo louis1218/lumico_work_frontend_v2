@@ -10,6 +10,7 @@ import { isRepair, listQueue, removeItem, saveItem, type QueuedItem, type Queued
 
 export const SYNCED_EVENT = "lumico:synced";
 export const PROGRESS_EVENT = "lumico:sync-progress";
+export const STUCK_EVENT = "lumico:net-stuck"; // a photo upload never started although the phone says it is online
 
 /** What the item being uploaded right now is doing, for the status list. */
 export interface SyncProgress {
@@ -112,6 +113,7 @@ function putPhoto(url: string, blob: Blob, parent: AbortSignal, onProgress: (sen
     };
     xhr.onabort = () => {
       log(`S3 upload stopped: ${parent.aborted ? "replaced by a newer run" : started ? "no data moving" : "never started"}`);
+      if (!parent.aborted && !started && navigator.onLine) window.dispatchEvent(new Event(STUCK_EVENT));
       finish(new Error("Upload stopped."));
     };
     kick();

@@ -1,32 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  FaCloudUploadAlt,
-  FaCheck,
-  FaChevronDown,
-  FaChevronUp,
-  FaExclamationTriangle,
-} from "react-icons/fa";
+import { FaCloudUploadAlt, FaCheck, FaChevronDown, FaChevronUp, FaExclamationTriangle } from "react-icons/fa";
 import type { Session } from "../../App";
 import { timeOf } from "../../lib/inspection";
-import {
-  QUEUE_CHANGED,
-  isRepair,
-  listQueue,
-  removeItem,
-  requestPersistence,
-  saveItem,
-  type QueuedItem,
-} from "../../lib/offlineQueue";
+import { QUEUE_CHANGED, isRepair, listQueue, removeItem, requestPersistence, saveItem, type QueuedItem } from "../../lib/offlineQueue";
 import { useNavigate } from "react-router-dom";
 import { log } from "../../lib/debugLog";
 import { isDirty } from "../../lib/dirty";
-import {
-  PROGRESS_EVENT,
-  photosOf,
-  syncQueue,
-  type SyncOutcome,
-  type SyncProgress,
-} from "../../lib/sync";
+import { PROGRESS_EVENT, STUCK_EVENT, photosOf, syncQueue, type SyncOutcome, type SyncProgress } from "../../lib/sync";
 import styles from "./SyncStatus.module.scss";
 
 interface Props {
@@ -34,19 +14,31 @@ interface Props {
 }
 
 const RELOAD_KEY = "lumico:autoReload";
+// Reloading is only safe when the app can start with no signal (installed from Safari, worker running)
+const canAutoReload = () => "serviceWorker" in navigator && !!navigator.serviceWorker.controller;
 const STALLED_AFTER_MS = 20_000; // no sign of progress for this long = "taking long"
 const AWAY_LONG_MS = 5_000; // the app was in the background at least this long
 
 const describe = (i: QueuedItem) => {
   const list = `${i.panels.length === 1 ? "Panel" : "Panels"} ${i.panels.map((p) => p.panel).join(", ")}`;
-  const what = isRepair(i)
-    ? `Repair · ${list}`
-    : i.panels.length === 0
-      ? "No issues"
-      : list;
+  const what = isRepair(i) ? `Repair · ${list}` : i.panels.length === 0 ? "No issues" : list;
   const photos = photosOf(i).length;
   return `${what} · ${photos} ${photos === 1 ? "photo" : "photos"} · saved ${timeOf(i.inspected_at)}`;
 };
+
+/** Reload the page to get a fresh connection, but only when that is safe: online, no half-filled form, the app can start offline, and not more than once every 2 minutes. */
+function reloadIfSafe(why: string): boolean {
+  if (!navigator.onLine || isDirty() || !canAutoReload()) return false;
+  try {
+    if (Date.now() - Number(sessionStorage.getItem(RELOAD_KEY) ?? 0) < 120_000) return false;
+    sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+  } catch {
+    return false;
+  }
+  log(`auto reload to reconnect (${why})`);
+  window.location.reload();
+  return true;
+}
 
 /**
  * Lists what is saved on the phone but not yet uploaded, shows each one's progress, and uploads
@@ -85,16 +77,12 @@ export default function SyncStatus({ session }: Props) {
       setBusy(true);
       setStalled(false);
       try {
-        const waitingNow = (await listQueue()).filter(
-          (i) => i.username === session.username && !i.error,
-        );
+        const waitingNow = (await listQueue()).filter((i) => i.username === session.username && !i.error);
         if (round === roundRef.current) setBatchTotal(waitingNow.length);
         const result = await syncQueue(session.username, force);
         if (round === roundRef.current) {
           setStopped(result.stopped);
-          setFails((n) =>
-            result.stopped === "offline" && navigator.onLine ? n + 1 : 0,
-          );
+          setFails((n) => (result.stopped === "offline" && navigator.onLine ? n + 1 : 0));
         }
       } catch {
         if (round === roundRef.current) setStopped("offline");
@@ -120,17 +108,11 @@ export default function SyncStatus({ session }: Props) {
 
   // For the app log: was this page just (re)loaded, and is it being closed or reloaded
   useEffect(() => {
-    const nav = performance.getEntriesByType("navigation")[0] as
-      | PerformanceNavigationTiming
-      | undefined;
-    log(
-      `screen opened (page load type: ${nav?.type ?? "?"}) worker=${"serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "on" : "none") : "n/a"}`,
-    );
-    const onHide = (e: PageTransitionEvent) =>
-      log(`PAGE CLOSING OR RELOADING (persisted=${e.persisted})`);
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    log(`screen opened (page load type: ${nav?.type ?? "?"}) worker=${"serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "on" : "none") : "n/a"}`);
+    const onHide = (e: PageTransitionEvent) => log(`PAGE CLOSING OR RELOADING (persisted=${e.persisted})`);
     const onError = (e: ErrorEvent) => log(`JS error: ${e.message}`);
-    const onReject = (e: PromiseRejectionEvent) =>
-      log(`unhandled error: ${String(e.reason)}`);
+    const onReject = (e: PromiseRejectionEvent) => log(`unhandled error: ${String(e.reason)}`);
     window.addEventListener("pagehide", onHide);
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onReject);
@@ -170,11 +152,10 @@ export default function SyncStatus({ session }: Props) {
       if (busyRef.current && away > AWAY_LONG_MS) restart();
       else trySync();
     };
-    const onNet = () =>
-      log(`phone says: ${navigator.onLine ? "online" : "offline"}`);
+    const onNet = () => log(`phone says: ${navigator.onLine ? "online" : "offline"}`);
     window.addEventListener("online", onNet);
     window.addEventListener("offline", onNet);
-    window.addEventListener("online", trySync);
+    window.addEventListener("online", restart); // a run that began while offline is stuck: start a fresh one
     window.addEventListener("pageshow", onVisible);
     window.addEventListener(QUEUE_CHANGED, onChange);
     window.addEventListener(PROGRESS_EVENT, onProgress);
@@ -182,7 +163,7 @@ export default function SyncStatus({ session }: Props) {
     return () => {
       window.removeEventListener("online", onNet);
       window.removeEventListener("offline", onNet);
-      window.removeEventListener("online", trySync);
+      window.removeEventListener("online", restart);
       window.removeEventListener("pageshow", onVisible);
       window.removeEventListener(QUEUE_CHANGED, onChange);
       window.removeEventListener(PROGRESS_EVENT, onProgress);
@@ -193,25 +174,21 @@ export default function SyncStatus({ session }: Props) {
   // The page can lose its connection for good after the phone changes network (a reload always
   // fixes it). So reload by itself, but never while a form is half filled in and at most every 2 minutes.
   useEffect(() => {
-    if (fails < 2 || busy || !navigator.onLine || isDirty()) return;
-    try {
-      if (
-        Date.now() - Number(sessionStorage.getItem(RELOAD_KEY) ?? 0) <
-        120_000
-      )
-        return;
-      sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
-    } catch {
-      return;
-    }
-    log("auto reload to reconnect");
-    window.location.reload();
+    if (fails < 1 || busy) return;
+    reloadIfSafe("upload keeps failing while online");
   }, [fails, busy]);
 
+  // A photo that never starts sending, with the phone online, is the stuck connection: reload at once
+  useEffect(() => {
+    const onStuck = () => {
+      reloadIfSafe("photo upload never started");
+    };
+    window.addEventListener(STUCK_EVENT, onStuck);
+    return () => window.removeEventListener(STUCK_EVENT, onStuck);
+  }, []);
+
   // Keep trying while anything is waiting (a phone can be "online" with no real signal)
-  const waiting = items.filter(
-    (i) => i.username === session.username && !i.error,
-  );
+  const waiting = items.filter((i) => i.username === session.username && !i.error);
   useEffect(() => {
     if (waiting.length === 0) return;
     const t = setInterval(trySync, 20_000);
@@ -224,10 +201,7 @@ export default function SyncStatus({ session }: Props) {
       setStalled(false);
       return;
     }
-    const t = setInterval(
-      () => setStalled(Date.now() - lastActivity.current > STALLED_AFTER_MS),
-      3000,
-    );
+    const t = setInterval(() => setStalled(Date.now() - lastActivity.current > STALLED_AFTER_MS), 3000);
     return () => clearInterval(t);
   }, [busy]);
 
@@ -263,17 +237,9 @@ export default function SyncStatus({ session }: Props) {
     return () => clearTimeout(t);
   }, [waiting.length]);
 
-  const failed = items.filter(
-    (i) => i.username === session.username && i.error,
-  );
+  const failed = items.filter((i) => i.username === session.username && i.error);
   const others = items.filter((i) => i.username !== session.username);
-  if (
-    waiting.length === 0 &&
-    failed.length === 0 &&
-    others.length === 0 &&
-    !allDone
-  )
-    return null;
+  if (waiting.length === 0 && failed.length === 0 && others.length === 0 && !allDone) return null;
 
   const retry = async (item: QueuedItem) => {
     await saveItem({ ...item, error: undefined, attempts: 0 });
@@ -282,36 +248,22 @@ export default function SyncStatus({ session }: Props) {
   };
 
   const discard = async (item: QueuedItem) => {
-    if (
-      !window.confirm(
-        `Delete block ${item.block}, tracker ${item.tracker} from this phone? It will never be uploaded.`,
-      )
-    )
-      return;
+    if (!window.confirm(`Delete block ${item.block}, tracker ${item.tracker} from this phone? It will never be uploaded.`)) return;
     await removeItem(item.id);
     refresh();
   };
 
-  const otherNames = [...new Set(others.map((i) => i.name || i.username))].join(
-    ", ",
-  );
+  const otherNames = [...new Set(others.map((i) => i.name || i.username))].join(", ");
   const doneThisRound = Math.max(0, batchTotal - waiting.length);
 
   const status = (item: QueuedItem) => {
     const retry = item.attempts > 0 ? ` · try ${item.attempts + 1}` : "";
     if (progress?.id === item.id) {
-      if (progress.stage === "saving")
-        return { text: "Saving…", pct: 100, live: true };
-      const pct =
-        progress.total > 0
-          ? Math.round(((progress.done + progress.part) / progress.total) * 100)
-          : 0;
+      if (progress.stage === "saving") return { text: "Saving…", pct: 100, live: true };
+      const pct = progress.total > 0 ? Math.round(((progress.done + progress.part) / progress.total) * 100) : 0;
       const n = Math.min(progress.done + 1, progress.total);
       return {
-        text:
-          progress.total > 0
-            ? `Photo ${n} of ${progress.total} · ${pct}%${retry}`
-            : "Uploading…",
+        text: progress.total > 0 ? `Photo ${n} of ${progress.total} · ${pct}%${retry}` : "Uploading…",
         pct,
         live: true,
       };
@@ -328,14 +280,7 @@ export default function SyncStatus({ session }: Props) {
             <FaCloudUploadAlt aria-hidden="true" className={styles.icon} />
             <p className={styles.text}>
               <strong>
-                {waiting.length}{" "}
-                {waiting.every(isRepair)
-                  ? waiting.length === 1
-                    ? "repair"
-                    : "repairs"
-                  : waiting.length === 1
-                    ? "job"
-                    : "jobs"}
+                {waiting.length} {waiting.every(isRepair) ? (waiting.length === 1 ? "repair" : "repairs") : waiting.length === 1 ? "job" : "jobs"}
               </strong>{" "}
               saved on this phone, not uploaded yet.{" "}
               <span className={styles.sub}>
@@ -348,8 +293,10 @@ export default function SyncStatus({ session }: Props) {
                   : stopped === "login"
                     ? "Your login has expired. Log in again to upload."
                     : stopped === "offline"
-                      ? fails >= 2
-                        ? "The phone says it is online but the upload cannot connect. The app reloads itself to reconnect when no form is open. Or tap Reload app. Your repairs are safe on this phone."
+                      ? fails >= 1
+                        ? canAutoReload()
+                          ? "The phone says it is online but the upload cannot connect. The app reloads itself to reconnect when no form is open, or tap Reload app. Your repairs are safe on this phone."
+                          : "The phone says it is online but the upload cannot connect. Tap Reload app, or swipe the app away and open it again. Your repairs are safe on this phone."
                         : "No signal. They upload automatically when you are back online. Keep the app installed and do not log out."
                       : ""}
               </span>
@@ -357,53 +304,27 @@ export default function SyncStatus({ session }: Props) {
             <div className={styles.actions}>
               {busy ? (
                 stalled && (
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    onClick={restart}
-                  >
+                  <button type="button" className={styles.btn} onClick={restart}>
                     Restart upload
                   </button>
                 )
               ) : (
                 <>
-                  <button
-                    type="button"
-                    className={styles.btn}
-                    onClick={trySync}
-                  >
+                  <button type="button" className={styles.btn} onClick={trySync}>
                     Upload now
                   </button>
-                  {fails >= 2 && (
-                    <button
-                      type="button"
-                      className={styles.btn}
-                      onClick={() => window.location.reload()}
-                    >
+                  {fails >= 1 && (
+                    <button type="button" className={styles.btn} onClick={() => window.location.reload()}>
                       Reload app
                     </button>
                   )}
                 </>
               )}
-              <button
-                type="button"
-                className={styles.btnQuiet}
-                onClick={() => navigate("/debug")}
-              >
+              <button type="button" className={styles.btnQuiet} onClick={() => navigate("/debug")}>
                 Log
               </button>
-              <button
-                type="button"
-                className={styles.toggle}
-                onClick={() => setOpen((o) => !o)}
-                aria-expanded={open}
-                aria-label={open ? "Hide list" : "Show list"}
-              >
-                {open ? (
-                  <FaChevronUp aria-hidden="true" />
-                ) : (
-                  <FaChevronDown aria-hidden="true" />
-                )}
+              <button type="button" className={styles.toggle} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Hide list" : "Show list"}>
+                {open ? <FaChevronUp aria-hidden="true" /> : <FaChevronDown aria-hidden="true" />}
               </button>
             </div>
           </div>
@@ -419,11 +340,7 @@ export default function SyncStatus({ session }: Props) {
                         Block {item.block} · Tracker {item.tracker}
                       </strong>
                       <span className={styles.rowSub}>{describe(item)}</span>
-                      {item.attempts > 0 && item.lastError && (
-                        <span className={styles.rowSub}>
-                          Last try failed: {item.lastError}
-                        </span>
-                      )}
+                      {item.attempts > 0 && item.lastError && <span className={styles.rowSub}>Last try failed: {item.lastError}</span>}
                     </div>
                     <div className={styles.rowStatus}>
                       <span>{s.text}</span>
@@ -448,22 +365,13 @@ export default function SyncStatus({ session }: Props) {
             <strong>
               Block {item.block}, tracker {item.tracker}
             </strong>{" "}
-            could not be uploaded.{" "}
-            <span className={styles.sub}>{item.error}</span>
+            could not be uploaded. <span className={styles.sub}>{item.error}</span>
           </p>
           <div className={styles.actions}>
-            <button
-              type="button"
-              className={styles.btn}
-              onClick={() => retry(item)}
-            >
+            <button type="button" className={styles.btn} onClick={() => retry(item)}>
               Try again
             </button>
-            <button
-              type="button"
-              className={styles.btnQuiet}
-              onClick={() => discard(item)}
-            >
+            <button type="button" className={styles.btnQuiet} onClick={() => discard(item)}>
               Delete
             </button>
           </div>
@@ -475,14 +383,10 @@ export default function SyncStatus({ session }: Props) {
           <FaExclamationTriangle aria-hidden="true" className={styles.icon} />
           <p className={styles.text}>
             <strong>
-              {others.length}{" "}
-              {others.length === 1 ? "inspection" : "inspections"}
+              {others.length} {others.length === 1 ? "inspection" : "inspections"}
             </strong>{" "}
-            from {otherNames} {others.length === 1 ? "is" : "are"} still on this
-            phone.{" "}
-            <span className={styles.sub}>
-              They need to log in here to upload.
-            </span>
+            from {otherNames} {others.length === 1 ? "is" : "are"} still on this phone.{" "}
+            <span className={styles.sub}>They need to log in here to upload.</span>
           </p>
         </div>
       )}
@@ -491,10 +395,7 @@ export default function SyncStatus({ session }: Props) {
         <div className={`${styles.bar} ${styles.good}`}>
           <FaCheck aria-hidden="true" className={styles.icon} />
           <p className={styles.text}>
-            <strong>All uploaded.</strong>{" "}
-            <span className={styles.sub}>
-              Everything saved on this phone is now in the system.
-            </span>
+            <strong>All uploaded.</strong> <span className={styles.sub}>Everything saved on this phone is now in the system.</span>
           </p>
         </div>
       )}
