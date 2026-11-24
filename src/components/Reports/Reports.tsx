@@ -20,7 +20,38 @@ interface Progress {
   }[];
 }
 
-type Tab = "daily" | "staff" | "client";
+interface RepairDaily {
+  date: string;
+  photo_base: string;
+  totals: { panels: number; fixed: number; replaced: number; trackers: number; blocks_touched: number };
+  staff: {
+    username: string;
+    first_name: string | null;
+    last_name: string | null;
+    panels: number;
+    fixed: number;
+    replaced: number;
+    first_at: string;
+    last_at: string;
+  }[];
+  repairs: {
+    id: number;
+    site: string;
+    block: number;
+    tracker: number;
+    panel: number;
+    action: "fix" | "replace";
+    notes: string;
+    before_keys: string[];
+    after_keys: string[];
+    username: string;
+    first_name: string | null;
+    last_name: string | null;
+    repaired_at: string;
+  }[];
+}
+
+type Tab = "daily" | "repairs" | "staff" | "client";
 
 export default function Reports() {
   const [tab, setTab] = useState<Tab>("daily");
@@ -28,6 +59,7 @@ export default function Reports() {
   const [site, setSite] = useState("all");
   const [daily, setDaily] = useState<Daily | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
+  const [repairs, setRepairs] = useState<RepairDaily | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
@@ -40,7 +72,9 @@ export default function Reports() {
     setLoading(true);
     setError("");
     const job =
-      tab !== "staff"
+      tab === "repairs"
+        ? apiJson<RepairDaily>(`/reports/repairs?${new URLSearchParams({ date, site })}`).then((r) => !cancelled && setRepairs(r))
+        : tab !== "staff"
         ? apiJson<Daily>(`/reports/daily?${new URLSearchParams({ date, site })}`).then((d) => !cancelled && setDaily(d))
         : apiJson<Progress>(
             `/reports/staff-progress?${new URLSearchParams({ date_to: date, date_from: shiftDay(date, -13), site })}`,
@@ -56,12 +90,14 @@ export default function Reports() {
   const downloadCsv = async () => {
     setExporting(true);
     try {
-      const res = await apiFetch(api(`/reports/daily.csv?${new URLSearchParams({ date, site })}`));
+      const path = tab === "repairs" ? "/reports/repairs.csv" : "/reports/daily.csv";
+      const file = tab === "repairs" ? "repairs" : "inspections";
+      const res = await apiFetch(api(`${path}?${new URLSearchParams({ date, site })}`));
       if (!res.ok) throw new Error("Could not download the CSV.");
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = url;
-      a.download = `inspections-${date}.csv`;
+      a.download = `${file}-${date}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -84,9 +120,9 @@ export default function Reports() {
       <header className={styles.top} data-print="hide">
         <h1 className={styles.title}>Reports</h1>
         <div className={styles.tabs} role="tablist">
-          {(["daily", "staff", "client"] as Tab[]).map((t) => (
+          {(["daily", "repairs", "staff", "client"] as Tab[]).map((t) => (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-              {t === "daily" ? "Daily report" : t === "staff" ? "Staff progress" : "Client report"}
+              {t === "daily" ? "Inspections" : t === "repairs" ? "Repairs" : t === "staff" ? "Staff progress" : "Client report"}
             </button>
           ))}
         </div>
@@ -131,14 +167,16 @@ export default function Reports() {
             onChange={setPerson}
           />
         )}
-        {tab === "daily" && (
+        {(tab === "daily" || tab === "repairs") && (
           <div className={styles.actions}>
             <button onClick={downloadCsv} disabled={exporting}>
               <FaDownload aria-hidden="true" /> {exporting ? "Preparing…" : "Download CSV"}
             </button>
-            <button onClick={() => setTab("client")}>
-              <FaPrint aria-hidden="true" /> Client report (PDF)
-            </button>
+            {tab === "daily" && (
+              <button onClick={() => setTab("client")}>
+                <FaPrint aria-hidden="true" /> Client report (PDF)
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -283,6 +321,8 @@ export default function Reports() {
         </div>
       )}
 
+      {tab === "repairs" && repairs && !loading && <RepairsView data={repairs} showSite={sites.length > 1} onPhoto={setPhoto} />}
+
       {tab === "staff" && progress && !loading && <StaffMatrix data={progress} only={person} />}
 
       {photo && (
@@ -293,6 +333,111 @@ export default function Reports() {
           <img src={photo} alt="Inspection" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
+    </div>
+  );
+}
+
+function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite: boolean; onPhoto: (url: string) => void }) {
+  const t = data.totals;
+  const photos = (keys: string[], label: string, i: RepairDaily["repairs"][number]) =>
+    keys.length > 0 && (
+      <div>
+        <p className={styles.meta}>{label}</p>
+        <ul className={styles.photos} data-print="hide">
+          {keys.map((k, n) => (
+            <li key={k}>
+              <button onClick={() => onPhoto(`${data.photo_base}/${k}`)} aria-label={`Open ${label.toLowerCase()} photo ${n + 1}`}>
+                <img src={`${data.photo_base}/${k}`} alt={`Block ${i.block} tracker ${i.tracker} panel ${i.panel}, ${label.toLowerCase()} ${n + 1}`} loading="lazy" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+
+  return (
+    <div>
+      <p className={styles.printTitle}>Lumico solar farm repair report, {longDate(data.date)}</p>
+
+      <section className={styles.ledger} aria-label="Repair summary">
+        <div>
+          <strong>{t.panels}</strong>
+          <span>panels repaired</span>
+        </div>
+        <div>
+          <strong>{t.fixed}</strong>
+          <span>fixed</span>
+        </div>
+        <div>
+          <strong>{t.replaced}</strong>
+          <span>replaced</span>
+        </div>
+        <div>
+          <strong>{t.trackers}</strong>
+          <span>trackers</span>
+        </div>
+      </section>
+
+      <section className={styles.panel}>
+        <h2>Staff</h2>
+        {data.staff.length === 0 ? (
+          <p className={styles.muted}>No repairs recorded on this day.</p>
+        ) : (
+          <div className={styles.tableWrap}>
+            <table className={styles.cards}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Panels</th>
+                  <th>Fixed</th>
+                  <th>Replaced</th>
+                  <th>First</th>
+                  <th>Last</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.staff.map((s) => (
+                  <tr key={s.username}>
+                    <td>{fullName(s.first_name, s.last_name, s.username)}</td>
+                    <td data-label="Panels">{s.panels}</td>
+                    <td data-label="Fixed">{s.fixed}</td>
+                    <td data-label="Replaced">{s.replaced}</td>
+                    <td data-label="First">{dateTimeOf(s.first_at)}</td>
+                    <td data-label="Last">{dateTimeOf(s.last_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className={styles.panel}>
+        <h2>Repaired panels ({data.repairs.length})</h2>
+        {data.repairs.length === 0 ? (
+          <p className={styles.muted}>No repairs recorded.</p>
+        ) : (
+          <ul className={styles.issues}>
+            {data.repairs.map((i) => (
+              <li key={i.id}>
+                <div className={styles.issueHead}>
+                  <strong>
+                    Block {i.block}, tracker {i.tracker}, panel {i.panel}
+                  </strong>
+                  <span>{i.action === "fix" ? "Fixed" : "Replaced"}</span>
+                </div>
+                <p className={styles.meta}>
+                  {fullName(i.first_name, i.last_name, i.username)}, {dateTimeOf(i.repaired_at)}
+                  {showSite ? `, ${i.site}` : ""}
+                </p>
+                {i.notes && <p className={styles.notes}>{i.notes}</p>}
+                {photos(i.before_keys, "Before", i)}
+                {photos(i.after_keys, "After", i)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
