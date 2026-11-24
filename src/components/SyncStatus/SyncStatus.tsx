@@ -1,12 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaCloudUploadAlt, FaCheck, FaChevronDown, FaChevronUp, FaExclamationTriangle } from "react-icons/fa";
+import {
+  FaCloudUploadAlt,
+  FaCheck,
+  FaChevronDown,
+  FaChevronUp,
+  FaExclamationTriangle,
+} from "react-icons/fa";
 import type { Session } from "../../App";
 import { timeOf } from "../../lib/inspection";
-import { QUEUE_CHANGED, isRepair, listQueue, removeItem, requestPersistence, saveItem, type QueuedItem } from "../../lib/offlineQueue";
+import {
+  QUEUE_CHANGED,
+  isRepair,
+  listQueue,
+  removeItem,
+  requestPersistence,
+  saveItem,
+  type QueuedItem,
+} from "../../lib/offlineQueue";
 import { useNavigate } from "react-router-dom";
 import { log } from "../../lib/debugLog";
 import { isDirty } from "../../lib/dirty";
-import { PROGRESS_EVENT, photosOf, syncQueue, type SyncOutcome, type SyncProgress } from "../../lib/sync";
+import {
+  PROGRESS_EVENT,
+  photosOf,
+  syncQueue,
+  type SyncOutcome,
+  type SyncProgress,
+} from "../../lib/sync";
 import styles from "./SyncStatus.module.scss";
 
 interface Props {
@@ -19,7 +39,11 @@ const AWAY_LONG_MS = 5_000; // the app was in the background at least this long
 
 const describe = (i: QueuedItem) => {
   const list = `${i.panels.length === 1 ? "Panel" : "Panels"} ${i.panels.map((p) => p.panel).join(", ")}`;
-  const what = isRepair(i) ? `Repair · ${list}` : i.panels.length === 0 ? "No issues" : list;
+  const what = isRepair(i)
+    ? `Repair · ${list}`
+    : i.panels.length === 0
+      ? "No issues"
+      : list;
   const photos = photosOf(i).length;
   return `${what} · ${photos} ${photos === 1 ? "photo" : "photos"} · saved ${timeOf(i.inspected_at)}`;
 };
@@ -61,12 +85,16 @@ export default function SyncStatus({ session }: Props) {
       setBusy(true);
       setStalled(false);
       try {
-        const waitingNow = (await listQueue()).filter((i) => i.username === session.username && !i.error);
+        const waitingNow = (await listQueue()).filter(
+          (i) => i.username === session.username && !i.error,
+        );
         if (round === roundRef.current) setBatchTotal(waitingNow.length);
         const result = await syncQueue(session.username, force);
         if (round === roundRef.current) {
           setStopped(result.stopped);
-          setFails((n) => (result.stopped === "offline" && navigator.onLine ? n + 1 : 0));
+          setFails((n) =>
+            result.stopped === "offline" && navigator.onLine ? n + 1 : 0,
+          );
         }
       } catch {
         if (round === roundRef.current) setStopped("offline");
@@ -89,6 +117,29 @@ export default function SyncStatus({ session }: Props) {
   const restart = useCallback(() => {
     void startSync(true);
   }, [startSync]);
+
+  // For the app log: was this page just (re)loaded, and is it being closed or reloaded
+  useEffect(() => {
+    const nav = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    log(
+      `screen opened (page load type: ${nav?.type ?? "?"}) worker=${"serviceWorker" in navigator ? (navigator.serviceWorker.controller ? "on" : "none") : "n/a"}`,
+    );
+    const onHide = (e: PageTransitionEvent) =>
+      log(`PAGE CLOSING OR RELOADING (persisted=${e.persisted})`);
+    const onError = (e: ErrorEvent) => log(`JS error: ${e.message}`);
+    const onReject = (e: PromiseRejectionEvent) =>
+      log(`unhandled error: ${String(e.reason)}`);
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onReject);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onReject);
+    };
+  }, []);
 
   useEffect(() => {
     requestPersistence();
@@ -119,7 +170,8 @@ export default function SyncStatus({ session }: Props) {
       if (busyRef.current && away > AWAY_LONG_MS) restart();
       else trySync();
     };
-    const onNet = () => log(`phone says: ${navigator.onLine ? "online" : "offline"}`);
+    const onNet = () =>
+      log(`phone says: ${navigator.onLine ? "online" : "offline"}`);
     window.addEventListener("online", onNet);
     window.addEventListener("offline", onNet);
     window.addEventListener("online", trySync);
@@ -143,7 +195,11 @@ export default function SyncStatus({ session }: Props) {
   useEffect(() => {
     if (fails < 2 || busy || !navigator.onLine || isDirty()) return;
     try {
-      if (Date.now() - Number(sessionStorage.getItem(RELOAD_KEY) ?? 0) < 120_000) return;
+      if (
+        Date.now() - Number(sessionStorage.getItem(RELOAD_KEY) ?? 0) <
+        120_000
+      )
+        return;
       sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
     } catch {
       return;
@@ -153,7 +209,9 @@ export default function SyncStatus({ session }: Props) {
   }, [fails, busy]);
 
   // Keep trying while anything is waiting (a phone can be "online" with no real signal)
-  const waiting = items.filter((i) => i.username === session.username && !i.error);
+  const waiting = items.filter(
+    (i) => i.username === session.username && !i.error,
+  );
   useEffect(() => {
     if (waiting.length === 0) return;
     const t = setInterval(trySync, 20_000);
@@ -166,7 +224,10 @@ export default function SyncStatus({ session }: Props) {
       setStalled(false);
       return;
     }
-    const t = setInterval(() => setStalled(Date.now() - lastActivity.current > STALLED_AFTER_MS), 3000);
+    const t = setInterval(
+      () => setStalled(Date.now() - lastActivity.current > STALLED_AFTER_MS),
+      3000,
+    );
     return () => clearInterval(t);
   }, [busy]);
 
@@ -202,9 +263,17 @@ export default function SyncStatus({ session }: Props) {
     return () => clearTimeout(t);
   }, [waiting.length]);
 
-  const failed = items.filter((i) => i.username === session.username && i.error);
+  const failed = items.filter(
+    (i) => i.username === session.username && i.error,
+  );
   const others = items.filter((i) => i.username !== session.username);
-  if (waiting.length === 0 && failed.length === 0 && others.length === 0 && !allDone) return null;
+  if (
+    waiting.length === 0 &&
+    failed.length === 0 &&
+    others.length === 0 &&
+    !allDone
+  )
+    return null;
 
   const retry = async (item: QueuedItem) => {
     await saveItem({ ...item, error: undefined, attempts: 0 });
@@ -213,22 +282,36 @@ export default function SyncStatus({ session }: Props) {
   };
 
   const discard = async (item: QueuedItem) => {
-    if (!window.confirm(`Delete block ${item.block}, tracker ${item.tracker} from this phone? It will never be uploaded.`)) return;
+    if (
+      !window.confirm(
+        `Delete block ${item.block}, tracker ${item.tracker} from this phone? It will never be uploaded.`,
+      )
+    )
+      return;
     await removeItem(item.id);
     refresh();
   };
 
-  const otherNames = [...new Set(others.map((i) => i.name || i.username))].join(", ");
+  const otherNames = [...new Set(others.map((i) => i.name || i.username))].join(
+    ", ",
+  );
   const doneThisRound = Math.max(0, batchTotal - waiting.length);
 
   const status = (item: QueuedItem) => {
     const retry = item.attempts > 0 ? ` · try ${item.attempts + 1}` : "";
     if (progress?.id === item.id) {
-      if (progress.stage === "saving") return { text: "Saving…", pct: 100, live: true };
-      const pct = progress.total > 0 ? Math.round(((progress.done + progress.part) / progress.total) * 100) : 0;
+      if (progress.stage === "saving")
+        return { text: "Saving…", pct: 100, live: true };
+      const pct =
+        progress.total > 0
+          ? Math.round(((progress.done + progress.part) / progress.total) * 100)
+          : 0;
       const n = Math.min(progress.done + 1, progress.total);
       return {
-        text: progress.total > 0 ? `Photo ${n} of ${progress.total} · ${pct}%${retry}` : "Uploading…",
+        text:
+          progress.total > 0
+            ? `Photo ${n} of ${progress.total} · ${pct}%${retry}`
+            : "Uploading…",
         pct,
         live: true,
       };
@@ -245,7 +328,14 @@ export default function SyncStatus({ session }: Props) {
             <FaCloudUploadAlt aria-hidden="true" className={styles.icon} />
             <p className={styles.text}>
               <strong>
-                {waiting.length} {waiting.every(isRepair) ? (waiting.length === 1 ? "repair" : "repairs") : waiting.length === 1 ? "job" : "jobs"}
+                {waiting.length}{" "}
+                {waiting.every(isRepair)
+                  ? waiting.length === 1
+                    ? "repair"
+                    : "repairs"
+                  : waiting.length === 1
+                    ? "job"
+                    : "jobs"}
               </strong>{" "}
               saved on this phone, not uploaded yet.{" "}
               <span className={styles.sub}>
@@ -267,27 +357,53 @@ export default function SyncStatus({ session }: Props) {
             <div className={styles.actions}>
               {busy ? (
                 stalled && (
-                  <button type="button" className={styles.btn} onClick={restart}>
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    onClick={restart}
+                  >
                     Restart upload
                   </button>
                 )
               ) : (
                 <>
-                  <button type="button" className={styles.btn} onClick={trySync}>
+                  <button
+                    type="button"
+                    className={styles.btn}
+                    onClick={trySync}
+                  >
                     Upload now
                   </button>
                   {fails >= 2 && (
-                    <button type="button" className={styles.btn} onClick={() => window.location.reload()}>
+                    <button
+                      type="button"
+                      className={styles.btn}
+                      onClick={() => window.location.reload()}
+                    >
                       Reload app
                     </button>
                   )}
                 </>
               )}
-              <button type="button" className={styles.btnQuiet} onClick={() => navigate("/debug")}>
+              <button
+                type="button"
+                className={styles.btnQuiet}
+                onClick={() => navigate("/debug")}
+              >
                 Log
               </button>
-              <button type="button" className={styles.toggle} onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Hide list" : "Show list"}>
-                {open ? <FaChevronUp aria-hidden="true" /> : <FaChevronDown aria-hidden="true" />}
+              <button
+                type="button"
+                className={styles.toggle}
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                aria-label={open ? "Hide list" : "Show list"}
+              >
+                {open ? (
+                  <FaChevronUp aria-hidden="true" />
+                ) : (
+                  <FaChevronDown aria-hidden="true" />
+                )}
               </button>
             </div>
           </div>
@@ -303,7 +419,11 @@ export default function SyncStatus({ session }: Props) {
                         Block {item.block} · Tracker {item.tracker}
                       </strong>
                       <span className={styles.rowSub}>{describe(item)}</span>
-                      {item.attempts > 0 && item.lastError && <span className={styles.rowSub}>Last try failed: {item.lastError}</span>}
+                      {item.attempts > 0 && item.lastError && (
+                        <span className={styles.rowSub}>
+                          Last try failed: {item.lastError}
+                        </span>
+                      )}
                     </div>
                     <div className={styles.rowStatus}>
                       <span>{s.text}</span>
@@ -328,13 +448,22 @@ export default function SyncStatus({ session }: Props) {
             <strong>
               Block {item.block}, tracker {item.tracker}
             </strong>{" "}
-            could not be uploaded. <span className={styles.sub}>{item.error}</span>
+            could not be uploaded.{" "}
+            <span className={styles.sub}>{item.error}</span>
           </p>
           <div className={styles.actions}>
-            <button type="button" className={styles.btn} onClick={() => retry(item)}>
+            <button
+              type="button"
+              className={styles.btn}
+              onClick={() => retry(item)}
+            >
               Try again
             </button>
-            <button type="button" className={styles.btnQuiet} onClick={() => discard(item)}>
+            <button
+              type="button"
+              className={styles.btnQuiet}
+              onClick={() => discard(item)}
+            >
               Delete
             </button>
           </div>
@@ -346,10 +475,14 @@ export default function SyncStatus({ session }: Props) {
           <FaExclamationTriangle aria-hidden="true" className={styles.icon} />
           <p className={styles.text}>
             <strong>
-              {others.length} {others.length === 1 ? "inspection" : "inspections"}
+              {others.length}{" "}
+              {others.length === 1 ? "inspection" : "inspections"}
             </strong>{" "}
-            from {otherNames} {others.length === 1 ? "is" : "are"} still on this phone.{" "}
-            <span className={styles.sub}>They need to log in here to upload.</span>
+            from {otherNames} {others.length === 1 ? "is" : "are"} still on this
+            phone.{" "}
+            <span className={styles.sub}>
+              They need to log in here to upload.
+            </span>
           </p>
         </div>
       )}
@@ -358,7 +491,10 @@ export default function SyncStatus({ session }: Props) {
         <div className={`${styles.bar} ${styles.good}`}>
           <FaCheck aria-hidden="true" className={styles.icon} />
           <p className={styles.text}>
-            <strong>All uploaded.</strong> <span className={styles.sub}>Everything saved on this phone is now in the system.</span>
+            <strong>All uploaded.</strong>{" "}
+            <span className={styles.sub}>
+              Everything saved on this phone is now in the system.
+            </span>
           </p>
         </div>
       )}
