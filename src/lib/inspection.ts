@@ -9,7 +9,7 @@ export interface InspectionOptions {
 export const FALLBACK_OPTIONS: InspectionOptions = {
   blocks: 25,
   trackers_per_block: 180,
-  panels_per_tracker: 90,
+  panels_per_tracker: 360,
   defect_types: [
     "Cracked glass",
     "Shattered glass",
