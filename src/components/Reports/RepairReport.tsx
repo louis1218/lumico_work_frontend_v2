@@ -1,9 +1,14 @@
 import { useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaPrint } from "react-icons/fa";
 import { dateTimeOf, fullName, longDate } from "../../lib/inspection";
+import { FIXED_ENABLED } from "../../lib/features";
 import type { RepairData } from "./types";
 import base from "./ClientReport.module.scss";
 import styles from "./RepairReport.module.scss";
+
+// This job only replaces panels: with FIXED_ENABLED off the report speaks of replacements only
+const WORK = FIXED_ENABLED ? "repair" : "replacement";
+const F = FIXED_ENABLED; // shorthand for the columns that only matter when panels can also be fixed
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -67,15 +72,17 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
   };
 
   const lead = (() => {
-    if (t.panels === 0) return `No panel repairs were recorded ${oneDay ? "on this day" : "in this period"}.`;
+    if (t.panels === 0) return `No panel ${WORK}s were recorded ${oneDay ? "on this day" : "in this period"}.`;
     const parts = [
       t.replaced ? plural(t.replaced, "panel was replaced", "panels were replaced") : "",
       t.fixed ? plural(t.fixed, "panel was repaired in place", "panels were repaired in place") : "",
     ].filter(Boolean);
     const evidence =
       t.with_both === t.panels
-        ? `Every repair is documented with before and after photos (${plural(photos, "photo", "photos")} in total).`
-        : `${t.with_both} of ${t.panels} repairs are documented with both before and after photos (${plural(photos, "photo", "photos")} in total).`;
+        ? `Every ${WORK} is documented with before and after photos (${plural(photos, "photo", "photos")} in total).`
+        : `${t.with_both} of ${t.panels} ${WORK}s are documented with both before and after photos (${plural(photos, "photo", "photos")} in total).`;
+    if (!F)
+      return `${oneDay ? "On this day" : "In this period"}, ${plural(t.panels, "panel was", "panels were")} replaced on ${plural(t.trackers, "tracker", "trackers")} across ${plural(t.blocks_touched, "block", "blocks")}. ${evidence}`;
     return `${oneDay ? "On this day" : "In this period"}, ${plural(t.panels, "panel", "panels")} on ${plural(t.trackers, "tracker", "trackers")} across ${plural(t.blocks_touched, "block", "blocks")} received attention: ${parts.join(" and ")}. ${evidence}`;
   })();
 
@@ -83,7 +90,7 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
     <div className={base.wrap}>
       <div className={base.bar} data-print="hide">
         <p>
-          This is the repair report as the client will receive it. Choose <strong>Save as PDF</strong> in the print window.
+          This is the {WORK} report as the client will receive it. Choose <strong>Save as PDF</strong> in the print window.
           {photos ? ` It includes ${plural(photos, "photo", "photos")}.` : ""}
         </p>
         <div className={styles.actions}>
@@ -96,11 +103,11 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
         </div>
       </div>
 
-      <article className={base.doc} ref={doc} aria-label="Client repair report">
+      <article className={base.doc} ref={doc} aria-label={`Client ${WORK} report`}>
         <header className={base.head}>
           <img src="/lumico-logo-print.png" alt="Lumico Electricals" className={base.logo} />
           <div>
-            <h1>Solar panel repair report</h1>
+            <h1>Solar panel {WORK} report</h1>
             <p className={base.date}>
               {siteLabel} solar farm · {period}
             </p>
@@ -129,18 +136,37 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
         <section className={base.block} aria-label="Summary">
           <h2>Summary</h2>
           <ul className={base.figures}>
-            <li>
-              <strong>{t.panels}</strong>
-              <span>panels repaired</span>
-            </li>
-            <li>
-              <strong>{t.replaced}</strong>
-              <span>panels replaced</span>
-            </li>
-            <li>
-              <strong>{t.fixed}</strong>
-              <span>panels fixed in place</span>
-            </li>
+            {F ? (
+              <>
+                <li>
+                  <strong>{t.panels}</strong>
+                  <span>panels repaired</span>
+                </li>
+                <li>
+                  <strong>{t.replaced}</strong>
+                  <span>panels replaced</span>
+                </li>
+                <li>
+                  <strong>{t.fixed}</strong>
+                  <span>panels fixed in place</span>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <strong>{t.panels}</strong>
+                  <span>panels replaced</span>
+                </li>
+                <li>
+                  <strong>{t.trackers}</strong>
+                  <span>{t.trackers === 1 ? "tracker" : "trackers"}</span>
+                </li>
+                <li>
+                  <strong>{t.blocks_touched}</strong>
+                  <span>{t.blocks_touched === 1 ? "block" : "blocks"}</span>
+                </li>
+              </>
+            )}
             <li>
               <strong>{photos}</strong>
               <span>
@@ -159,8 +185,8 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
                 <tr>
                   <th>Block</th>
                   <th>Trackers</th>
-                  <th>Replaced</th>
-                  <th>Fixed</th>
+                  <th>{F ? "Replaced" : "Panels replaced"}</th>
+                  {F && <th>Fixed</th>}
                   <th>Photos</th>
                 </tr>
               </thead>
@@ -169,8 +195,8 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
                   <tr key={b.block}>
                     <td>Block {b.block}</td>
                     <td>{b.trackers}</td>
-                    <td>{b.replaced}</td>
-                    <td>{b.fixed}</td>
+                    <td>{F ? b.replaced : b.panels}</td>
+                    {F && <td>{b.fixed}</td>}
                     <td>{b.photos}</td>
                   </tr>
                 ))}
@@ -182,11 +208,13 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
                     <strong>{t.trackers}</strong>
                   </td>
                   <td>
-                    <strong>{t.replaced}</strong>
+                    <strong>{F ? t.replaced : t.panels}</strong>
                   </td>
-                  <td>
-                    <strong>{t.fixed}</strong>
-                  </td>
+                  {F && (
+                    <td>
+                      <strong>{t.fixed}</strong>
+                    </td>
+                  )}
                   <td>
                     <strong>{photos}</strong>
                   </td>
@@ -203,10 +231,10 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Panels</th>
-                  <th>Replaced</th>
-                  <th>Fixed</th>
-                  <th>First – last repair</th>
+                  <th>{F ? "Panels" : "Panels replaced"}</th>
+                  {F && <th>Replaced</th>}
+                  {F && <th>Fixed</th>}
+                  <th>First – last {WORK}</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,8 +242,8 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
                   <tr key={s.username}>
                     <td>{fullName(s.first_name, s.last_name, s.username)}</td>
                     <td>{s.panels}</td>
-                    <td>{s.replaced}</td>
-                    <td>{s.fixed}</td>
+                    {F && <td>{s.replaced}</td>}
+                    {F && <td>{s.fixed}</td>}
                     <td>
                       {dateTimeOf(s.first_at)} – {dateTimeOf(s.last_at)}
                     </td>
@@ -228,7 +256,7 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
 
         {groups.length > 0 && (
           <section className={base.findings}>
-            <h2>Repair register</h2>
+            <h2>{F ? "Repair" : "Replacement"} register</h2>
             {groups.map((g) => (
               <div key={`${g.site}|${g.block}|${g.tracker}`} className={base.tracker}>
                 <h3>
@@ -239,9 +267,11 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
                   <section key={r.id} className={base.finding}>
                     <div className={styles.panelHead}>
                       <strong>Panel {r.panel}</strong>
-                      <span className={`${styles.tag} ${r.action === "replace" ? styles.replace : styles.fix}`}>
-                        {r.action === "replace" ? "Replaced" : "Fixed"}
-                      </span>
+                      {F && (
+                        <span className={`${styles.tag} ${r.action === "replace" ? styles.replace : styles.fix}`}>
+                          {r.action === "replace" ? "Replaced" : "Fixed"}
+                        </span>
+                      )}
                     </div>
                     {r.notes && <p className={base.notes}>{r.notes}</p>}
                     <p className={base.by}>
@@ -275,7 +305,7 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
         </section>
 
         <footer className={base.foot}>
-          Lumico Electricals Pty Ltd · Solar panel repair report · {siteLabel} · {period}
+          Lumico Electricals Pty Ltd · Solar panel {WORK} report · {siteLabel} · {period}
         </footer>
       </article>
     </div>

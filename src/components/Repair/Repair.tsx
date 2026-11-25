@@ -5,6 +5,7 @@ import { apiJson } from "../../api";
 import { FALLBACK_OPTIONS, PHOTO_BASE, type InspectionOptions, compressImage, dateTimeOf, fullName, localDate, longDate, watermarkImage } from "../../lib/inspection";
 import { QUEUE_CHANGED, enqueue, listRepairs, type QueuedPhoto, type QueuedRepair } from "../../lib/offlineQueue";
 import { setDirty } from "../../lib/dirty";
+import { FIXED_ENABLED } from "../../lib/features";
 import { SYNCED_EVENT } from "../../lib/sync";
 import Dropdown from "../Dropdown/Dropdown";
 import styles from "../Inspection/Inspection.module.scss"; // same look as the inspection form
@@ -58,7 +59,7 @@ interface Done {
 const MAX_PHOTOS = 10;
 const LAST_BLOCK_KEY = "lumico:lastBlock";
 const newId = () => crypto.randomUUID();
-const blankEntry = (): Entry => ({ id: newId(), panel: "", action: "", notes: "", before: [], after: [] });
+const blankEntry = (): Entry => ({ id: newId(), panel: "", action: FIXED_ENABLED ? "" : "replace", notes: "", before: [], after: [] });
 
 /** Record panels that were fixed or replaced, with before and after photos. Works with no signal. */
 export default function Repair({ session }: Props) {
@@ -85,7 +86,7 @@ export default function Repair({ session }: Props) {
 
   // Tell the app when this form holds something unsaved (it will not reload itself then)
   useEffect(() => {
-    setDirty("repair", saving || adding || entries.some((e) => e.panel || e.action || e.notes || e.before.length || e.after.length));
+    setDirty("repair", saving || adding || entries.some((e) => e.panel || (FIXED_ENABLED && e.action) || e.notes || e.before.length || e.after.length));
     return () => setDirty("repair", false);
   }, [entries, saving, adding]);
 
@@ -355,7 +356,7 @@ export default function Repair({ session }: Props) {
     <div className={styles.page} ref={topRef}>
       <header className={styles.top}>
         <div>
-          <h1 className={styles.title}>Panel repairs</h1>
+          <h1 className={styles.title}>{FIXED_ENABLED ? "Panel repairs" : "Panel replacements"}</h1>
           <p className={styles.sub}>
             <span className={styles.site}>{session.site}</span> solar farm, {longDate(today)}
           </p>
@@ -363,9 +364,17 @@ export default function Repair({ session }: Props) {
         {mine && (
           <p className={styles.tally} aria-label="All staff today">
             <span>All staff today:</span>
-            <strong>{mine.fixed}</strong> fixed
-            <span className={styles.dot} aria-hidden="true" />
-            <strong>{mine.replaced}</strong> replaced
+            {FIXED_ENABLED ? (
+              <>
+                <strong>{mine.fixed}</strong> fixed
+                <span className={styles.dot} aria-hidden="true" />
+                <strong>{mine.replaced}</strong> replaced
+              </>
+            ) : (
+              <>
+                <strong>{mine.replaced}</strong> {mine.replaced === 1 ? "panel" : "panels"} replaced
+              </>
+            )}
           </p>
         )}
       </header>
@@ -409,7 +418,7 @@ export default function Repair({ session }: Props) {
               return {
                 value: String(i + 1),
                 label: `Tracker ${i + 1}`,
-                note: state === "done" ? "repaired" : state === "phone" ? "on this phone" : undefined,
+                note: state === "done" ? (FIXED_ENABLED ? "repaired" : "replaced") : state === "phone" ? "on this phone" : undefined,
                 tone: state ? ("ok" as const) : undefined,
               };
             })}
@@ -431,14 +440,14 @@ export default function Repair({ session }: Props) {
             <section className={styles.recorded} aria-labelledby="rec">
               <h2 id="rec" className={styles.recordedTitle}>
                 <FaCheck aria-hidden="true" />
-                Already repaired on this tracker: {doneHere.length} {doneHere.length === 1 ? "panel" : "panels"}
+                Already {FIXED_ENABLED ? "repaired" : "replaced"} on this tracker: {doneHere.length} {doneHere.length === 1 ? "panel" : "panels"}
               </h2>
               <ul className={styles.recordedList}>
                 {doneHere.map((d) => (
                   <li key={`${d.panel}-${d.repaired_at}`}>
                     <div className={styles.recordedHead}>
                       <strong>Panel {d.panel}</strong>
-                      <span>{d.action === "fix" ? "Fixed" : "Replaced"}</span>
+                      {FIXED_ENABLED && <span>{d.action === "fix" ? "Fixed" : "Replaced"}</span>}
                     </div>
                     <p className={styles.recordedBy}>
                       {fullName(d.first_name, d.last_name, d.username)}, {dateTimeOf(d.repaired_at)}
@@ -468,12 +477,12 @@ export default function Repair({ session }: Props) {
 
           <section className={styles.section} aria-labelledby="pn">
             <h2 id="pn" className={styles.heading}>
-              <span className={styles.step}>2</span> Repaired panels
+              <span className={styles.step}>2</span> {FIXED_ENABLED ? "Repaired panels" : "Replaced panels"}
               <span className={styles.hint}>
                 {entries.length} of {options.panels_per_tracker} panels
               </span>
             </h2>
-            <p className={styles.muted}>Add each repaired panel with its before and after photos.</p>
+            <p className={styles.muted}>Add each {FIXED_ENABLED ? "repaired" : "replaced"} panel with its before and after photos.</p>
 
             {entries.map((e, i) => {
               const used = usedPanels(e.id);
@@ -497,11 +506,12 @@ export default function Repair({ session }: Props) {
                     placeholder="Select panel"
                     options={Array.from({ length: options.panels_per_tracker }, (_, n) => String(n + 1))
                       .filter((v) => !used.has(v))
-                      .map((v) => ({ value: v, label: `Panel ${v}`, note: repairedPanels.has(v) ? "repaired" : undefined, tone: repairedPanels.has(v) ? ("ok" as const) : undefined }))}
+                      .map((v) => ({ value: v, label: `Panel ${v}`, note: repairedPanels.has(v) ? (FIXED_ENABLED ? "repaired" : "replaced") : undefined, tone: repairedPanels.has(v) ? ("ok" as const) : undefined }))}
                     onChange={(v) => patchEntry(e.id, { panel: v })}
                   />
 
-                  <div className={styles.segment} role="radiogroup" aria-label={`What was done to panel ${i + 1}`}>
+                  {FIXED_ENABLED && (
+                    <div className={styles.segment} role="radiogroup" aria-label={`What was done to panel ${i + 1}`}>
                     <button type="button" role="radio" aria-checked={e.action === "fix"} data-tone="ok" onClick={() => patchEntry(e.id, { action: "fix" })}>
                       Fixed
                     </button>
@@ -509,6 +519,7 @@ export default function Repair({ session }: Props) {
                       Replaced
                     </button>
                   </div>
+                  )}
 
                   {photoBlock(e, "before")}
                   {photoBlock(e, "after")}

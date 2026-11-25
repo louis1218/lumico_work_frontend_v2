@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaCloudUploadAlt } from "react-icons/fa";
+import { FIXED_ENABLED } from "../../lib/features";
 import { timeOf } from "../../lib/inspection";
 import type { QueuedPhoto, QueuedRepair } from "../../lib/offlineQueue";
 import styles from "../Inspection/WaitingChecks.module.scss";
@@ -54,7 +55,7 @@ export default function WaitingRepairs({ repairs, onView }: Props) {
             <div key={p.panel} className={styles.item}>
               <div className={styles.head}>
                 <strong>Panel {p.panel}</strong>
-                <span>{p.action === "fix" ? "Fixed" : "Replaced"}</span>
+                {FIXED_ENABLED && <span>{p.action === "fix" ? "Fixed" : "Replaced"}</span>}
               </div>
               {p.notes && <p className={styles.note}>{p.notes}</p>}
               <p className={styles.note}>Before</p>

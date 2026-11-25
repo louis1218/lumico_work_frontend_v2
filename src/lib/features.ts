@@ -2,6 +2,10 @@
 // Inspecting trackers is paused for the repair job. Set to true to bring it back.
 export const INSPECT_ENABLED = false;
 
+// This job only replaces panels. Set to true to let staff choose "Fixed" as well, and to show fixed
+// and replaced as separate counts in the reports.
+export const FIXED_ENABLED = false;
+
 // The solar farm staff are working at. Saved with every record, so reports can tell sites apart.
 // Change both lines to move everyone to another site (phones switch over the next time the app opens).
 export const SITE = "manildra";

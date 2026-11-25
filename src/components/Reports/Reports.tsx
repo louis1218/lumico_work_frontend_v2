@@ -4,6 +4,7 @@ import { apiFetch, api, apiJson } from "../../api";
 import { dateTimeOf, dayKey, fullName, localDate, longDate, shiftDay } from "../../lib/inspection";
 import Dropdown from "../Dropdown/Dropdown";
 import ClientReport from "./ClientReport";
+import { FIXED_ENABLED } from "../../lib/features";
 import RepairReport from "./RepairReport";
 import type { Daily, RepairData } from "./types";
 import styles from "./Reports.module.scss";
@@ -348,26 +349,43 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
 
   return (
     <div>
-      <p className={styles.printTitle}>Lumico solar farm repair report, {data.date_from === data.date ? longDate(data.date) : `${longDate(data.date_from)} to ${longDate(data.date)}`}</p>
+      <p className={styles.printTitle}>Lumico solar farm {FIXED_ENABLED ? "repair" : "panel replacement"} report, {data.date_from === data.date ? longDate(data.date) : `${longDate(data.date_from)} to ${longDate(data.date)}`}</p>
 
       <section className={styles.ledger} aria-label="Repair summary">
-        <div>
-          <strong>{t.panels}</strong>
-          <span>panels repaired</span>
-        </div>
-        <div>
-          <strong>{t.fixed}</strong>
-          <span>fixed</span>
-        </div>
-        <div>
-          <strong>{t.replaced}</strong>
-          <span>replaced</span>
-        </div>
+        {FIXED_ENABLED ? (
+          <>
+            <div>
+              <strong>{t.panels}</strong>
+              <span>panels repaired</span>
+            </div>
+            <div>
+              <strong>{t.fixed}</strong>
+              <span>fixed</span>
+            </div>
+            <div>
+              <strong>{t.replaced}</strong>
+              <span>replaced</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <strong>{t.panels}</strong>
+              <span>panels replaced</span>
+            </div>
+            <div>
+              <strong>{t.trackers}</strong>
+              <span>{t.trackers === 1 ? "tracker" : "trackers"}</span>
+            </div>
+            <div>
+              <strong>{t.blocks_touched}</strong>
+              <span>{t.blocks_touched === 1 ? "block" : "blocks"}</span>
+            </div>
+          </>
+        )}
         <div>
           <strong>{t.before_photos + t.after_photos}</strong>
-          <span>
-            photos on {t.trackers} {t.trackers === 1 ? "tracker" : "trackers"}
-          </span>
+          <span>photos</span>
         </div>
       </section>
 
@@ -381,9 +399,9 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
               <thead>
                 <tr>
                   <th>Name</th>
-                  <th>Panels</th>
-                  <th>Fixed</th>
-                  <th>Replaced</th>
+                  <th>{FIXED_ENABLED ? "Panels" : "Panels replaced"}</th>
+                  {FIXED_ENABLED && <th>Fixed</th>}
+                  {FIXED_ENABLED && <th>Replaced</th>}
                   <th>First</th>
                   <th>Last</th>
                 </tr>
@@ -392,9 +410,9 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
                 {data.staff.map((s) => (
                   <tr key={s.username}>
                     <td>{fullName(s.first_name, s.last_name, s.username)}</td>
-                    <td data-label="Panels">{s.panels}</td>
-                    <td data-label="Fixed">{s.fixed}</td>
-                    <td data-label="Replaced">{s.replaced}</td>
+                    <td data-label={FIXED_ENABLED ? "Panels" : "Panels replaced"}>{s.panels}</td>
+                    {FIXED_ENABLED && <td data-label="Fixed">{s.fixed}</td>}
+                    {FIXED_ENABLED && <td data-label="Replaced">{s.replaced}</td>}
                     <td data-label="First">{dateTimeOf(s.first_at)}</td>
                     <td data-label="Last">{dateTimeOf(s.last_at)}</td>
                   </tr>
@@ -406,7 +424,7 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
       </section>
 
       <section className={styles.panel}>
-        <h2>Repaired panels ({data.repairs.length})</h2>
+        <h2>{FIXED_ENABLED ? "Repaired" : "Replaced"} panels ({data.repairs.length})</h2>
         {data.repairs.length === 0 ? (
           <p className={styles.muted}>No repairs recorded.</p>
         ) : (
@@ -417,7 +435,7 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
                   <strong>
                     Block {i.block}, tracker {i.tracker}, panel {i.panel}
                   </strong>
-                  <span>{i.action === "fix" ? "Fixed" : "Replaced"}</span>
+                  {FIXED_ENABLED && <span>{i.action === "fix" ? "Fixed" : "Replaced"}</span>}
                 </div>
                 <p className={styles.meta}>
                   {fullName(i.first_name, i.last_name, i.username)}, {dateTimeOf(i.repaired_at)}
