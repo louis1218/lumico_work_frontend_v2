@@ -97,7 +97,7 @@ export default function Repair({ session }: Props) {
   }, []);
 
   const loadMine = useCallback(() => {
-    apiJson<MySummary>(`/repairs/mine?${new URLSearchParams({ site, work_date: today })}`)
+    apiJson<MySummary>(`/repairs/today?${new URLSearchParams({ site, work_date: today })}`)
       .then(setMine)
       .catch(() => {});
   }, [site, today]);
@@ -361,7 +361,8 @@ export default function Repair({ session }: Props) {
           </p>
         </div>
         {mine && (
-          <p className={styles.tally} aria-label="Your totals today">
+          <p className={styles.tally} aria-label="All staff today">
+            <span>All staff today:</span>
             <strong>{mine.fixed}</strong> fixed
             <span className={styles.dot} aria-hidden="true" />
             <strong>{mine.replaced}</strong> replaced
