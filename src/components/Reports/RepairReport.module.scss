@@ -1,0 +1,146 @@
+// Extra pieces for the repair report. Everything else comes from ClientReport.module.scss.
+$ink: #1b2430;
+$muted: #5b6573;
+$rule: #d5d9e0;
+$good: #067647;
+$accent: #b45309;
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.secondary {
+  background: var(--color-surface-2) !important;
+  color: var(--color-label) !important;
+  border: 1px solid var(--color-separator-3) !important;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.replace {
+  background: #fff4e5;
+  color: $accent;
+}
+
+.fix {
+  background: #e7f6ee;
+  color: $good;
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+
+  strong {
+    font-size: 15px;
+    color: $ink;
+  }
+}
+
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.side {
+  h4 {
+    margin: 0 0 6px;
+    color: $muted;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+
+    &.many {
+      grid-template-columns: 1fr 1fr; // two or more photos sit side by side
+    }
+  }
+
+  li {
+    background: #eef0f3;
+    border-radius: 4px;
+    overflow: hidden;
+    break-inside: avoid;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 240px;
+    object-fit: contain;
+  }
+}
+
+.missing {
+  padding: 18px 10px;
+  border: 1px dashed $rule;
+  border-radius: 4px;
+  color: $muted;
+  font-size: 12px;
+  text-align: center;
+}
+
+.check {
+  color: $good;
+  font-weight: 700;
+}
+
+.signoff {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 8px;
+
+  div {
+    padding-top: 34px;
+    border-bottom: 1px solid $ink;
+  }
+  span {
+    display: block;
+    margin-top: 4px;
+    color: $muted;
+    font-size: 11px;
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  .side img {
+    max-height: 55mm;
+  }
+  .side ul.many img {
+    max-height: 40mm;
+  }
+}

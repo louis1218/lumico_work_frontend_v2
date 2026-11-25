@@ -2,6 +2,7 @@ import { useState } from "react";
 import styles from "./LoginAndSessionForm.module.scss";
 import type { Session } from "../../App";
 import { api } from "../../api";
+import { SITE, SITE_NAME } from "../../lib/features";
 
 interface LoginAndSessionFormProps {
   onComplete: (session: Session) => void;
@@ -21,7 +22,7 @@ export default function LoginAndSessionForm({
     username: "",
     password: "",
     date: new Date().toLocaleDateString("en-CA"),
-    site: "lilyvale",
+    site: SITE,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -147,7 +148,7 @@ export default function LoginAndSessionForm({
             <label className={styles.label}>Solar Farm</label>
             <input
               className={`${styles.input} ${styles.disabled}`}
-              value="Lilyvale"
+              value={SITE_NAME}
               readOnly
               disabled
             />

@@ -4,7 +4,8 @@ import { apiFetch, api, apiJson } from "../../api";
 import { dateTimeOf, dayKey, fullName, localDate, longDate, shiftDay } from "../../lib/inspection";
 import Dropdown from "../Dropdown/Dropdown";
 import ClientReport from "./ClientReport";
-import type { Daily } from "./types";
+import RepairReport from "./RepairReport";
+import type { Daily, RepairData } from "./types";
 import styles from "./Reports.module.scss";
 
 interface Progress {
@@ -20,38 +21,13 @@ interface Progress {
   }[];
 }
 
-interface RepairDaily {
-  date: string;
-  photo_base: string;
-  totals: { panels: number; fixed: number; replaced: number; trackers: number; blocks_touched: number };
-  staff: {
-    username: string;
-    first_name: string | null;
-    last_name: string | null;
-    panels: number;
-    fixed: number;
-    replaced: number;
-    first_at: string;
-    last_at: string;
-  }[];
-  repairs: {
-    id: number;
-    site: string;
-    block: number;
-    tracker: number;
-    panel: number;
-    action: "fix" | "replace";
-    notes: string;
-    before_keys: string[];
-    after_keys: string[];
-    username: string;
-    first_name: string | null;
-    last_name: string | null;
-    repaired_at: string;
-  }[];
-}
+type RepairDaily = RepairData;
 
-type Tab = "daily" | "repairs" | "staff" | "client";
+type Tab = "daily" | "repairs" | "staff" | "client" | "repairReport";
+type Range = "day" | "week" | "month" | "year";
+
+const RANGE_DAYS: Record<Range, number> = { day: 0, week: 6, month: 29, year: 365 };
+const RANGE_LABEL: Record<Range, string> = { day: "This day", week: "Last 7 days", month: "Last 30 days", year: "Last 12 months" };
 
 export default function Reports() {
   const [tab, setTab] = useState<Tab>("daily");
@@ -66,14 +42,17 @@ export default function Reports() {
   const [exporting, setExporting] = useState(false);
   const [allBlocks, setAllBlocks] = useState(false);
   const [person, setPerson] = useState("all");
+  const [range, setRange] = useState<Range>("day");
+  const dateFrom = shiftDay(date, -RANGE_DAYS[range]);
+  const repairTab = tab === "repairs" || tab === "repairReport";
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError("");
     const job =
-      tab === "repairs"
-        ? apiJson<RepairDaily>(`/reports/repairs?${new URLSearchParams({ date, site })}`).then((r) => !cancelled && setRepairs(r))
+      tab === "repairs" || tab === "repairReport"
+        ? apiJson<RepairDaily>(`/reports/repairs?${new URLSearchParams({ date, date_from: dateFrom, site })}`).then((r) => !cancelled && setRepairs(r))
         : tab !== "staff"
         ? apiJson<Daily>(`/reports/daily?${new URLSearchParams({ date, site })}`).then((d) => !cancelled && setDaily(d))
         : apiJson<Progress>(
@@ -85,19 +64,20 @@ export default function Reports() {
     return () => {
       cancelled = true;
     };
-  }, [tab, date, site]);
+  }, [tab, date, site, dateFrom]);
 
   const downloadCsv = async () => {
     setExporting(true);
     try {
       const path = tab === "repairs" ? "/reports/repairs.csv" : "/reports/daily.csv";
       const file = tab === "repairs" ? "repairs" : "inspections";
-      const res = await apiFetch(api(`${path}?${new URLSearchParams({ date, site })}`));
+      const params = new URLSearchParams(tab === "repairs" ? { date, date_from: dateFrom, site } : { date, site });
+      const res = await apiFetch(api(`${path}?${params}`));
       if (!res.ok) throw new Error("Could not download the CSV.");
       const url = URL.createObjectURL(await res.blob());
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${file}-${date}.csv`;
+      a.download = `${file}-${tab === "repairs" && dateFrom !== date ? `${dateFrom}_to_` : ""}${date}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -107,7 +87,7 @@ export default function Reports() {
     }
   };
 
-  const sites = daily?.sites ?? [];
+  const sites = [...new Set([...(daily?.sites ?? []), ...(repairs?.sites ?? [])])].sort();
   const staffOptions = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of progress?.rows ?? []) m.set(r.username, fullName(r.first_name, r.last_name, r.username));
@@ -121,7 +101,7 @@ export default function Reports() {
         <h1 className={styles.title}>Reports</h1>
         <div className={styles.tabs} role="tablist">
           {(["daily", "repairs", "staff", "client"] as Tab[]).map((t) => (
-            <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+            <button key={t} role="tab" aria-selected={tab === t || (t === "repairs" && tab === "repairReport")} onClick={() => setTab(t)}>
               {t === "daily" ? "Inspections" : t === "repairs" ? "Repairs" : t === "staff" ? "Staff progress" : "Client report"}
             </button>
           ))}
@@ -154,6 +134,17 @@ export default function Reports() {
           options={[{ value: "all", label: "All sites" }, ...sites.map((x) => ({ value: x, label: x.charAt(0).toUpperCase() + x.slice(1) }))]}
           onChange={setSite}
         />
+        {repairTab && (
+          <Dropdown
+            label="Period"
+            hideLabel
+            className={styles.siteDd}
+            placeholder="This day"
+            value={range}
+            options={(Object.keys(RANGE_LABEL) as Range[]).map((r) => ({ value: r, label: RANGE_LABEL[r] }))}
+            onChange={(v) => setRange(v as Range)}
+          />
+        )}
         {tab === "staff" && progress && (
           <Dropdown
             label="Staff member"
@@ -172,11 +163,9 @@ export default function Reports() {
             <button onClick={downloadCsv} disabled={exporting}>
               <FaDownload aria-hidden="true" /> {exporting ? "Preparing…" : "Download CSV"}
             </button>
-            {tab === "daily" && (
-              <button onClick={() => setTab("client")}>
-                <FaPrint aria-hidden="true" /> Client report (PDF)
-              </button>
-            )}
+            <button onClick={() => setTab(tab === "daily" ? "client" : "repairReport")}>
+              <FaPrint aria-hidden="true" /> Client report (PDF)
+            </button>
           </div>
         )}
       </div>
@@ -321,6 +310,8 @@ export default function Reports() {
         </div>
       )}
 
+      {tab === "repairReport" && repairs && !loading && <RepairReport data={repairs} onBack={() => setTab("repairs")} />}
+
       {tab === "repairs" && repairs && !loading && <RepairsView data={repairs} showSite={sites.length > 1} onPhoto={setPhoto} />}
 
       {tab === "staff" && progress && !loading && <StaffMatrix data={progress} only={person} />}
@@ -357,7 +348,7 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
 
   return (
     <div>
-      <p className={styles.printTitle}>Lumico solar farm repair report, {longDate(data.date)}</p>
+      <p className={styles.printTitle}>Lumico solar farm repair report, {data.date_from === data.date ? longDate(data.date) : `${longDate(data.date_from)} to ${longDate(data.date)}`}</p>
 
       <section className={styles.ledger} aria-label="Repair summary">
         <div>
@@ -373,15 +364,17 @@ function RepairsView({ data, showSite, onPhoto }: { data: RepairDaily; showSite:
           <span>replaced</span>
         </div>
         <div>
-          <strong>{t.trackers}</strong>
-          <span>trackers</span>
+          <strong>{t.before_photos + t.after_photos}</strong>
+          <span>
+            photos on {t.trackers} {t.trackers === 1 ? "tracker" : "trackers"}
+          </span>
         </div>
       </section>
 
       <section className={styles.panel}>
         <h2>Staff</h2>
         {data.staff.length === 0 ? (
-          <p className={styles.muted}>No repairs recorded on this day.</p>
+          <p className={styles.muted}>No repairs recorded in this period.</p>
         ) : (
           <div className={styles.tableWrap}>
             <table className={styles.cards}>
