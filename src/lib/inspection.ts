@@ -8,7 +8,7 @@ export interface InspectionOptions {
 // Used if the options request fails, so the form still works.
 export const FALLBACK_OPTIONS: InspectionOptions = {
   blocks: 25,
-  trackers_per_block: 180,
+  trackers_per_block: 300,
   panels_per_tracker: 360,
   defect_types: [
     "Cracked glass",
