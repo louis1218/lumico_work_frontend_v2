@@ -481,6 +481,9 @@ export default function Inspection({ session }: Props) {
           <Dropdown
             label="Block"
             value={block}
+            searchable
+            numeric
+            searchPlaceholder="Type a number to find a block"
             placeholder="Select block"
             options={Array.from({ length: options.blocks }, (_, i) => ({ value: String(i + 1), label: `Block ${i + 1}` }))}
             onChange={changeBlock}
