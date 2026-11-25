@@ -6,6 +6,9 @@ export const INSPECT_ENABLED = false;
 // and replaced as separate counts in the reports.
 export const FIXED_ENABLED = false;
 
+// How many panels this job replaces in total. The client report shows progress towards it.
+export const REPLACE_TARGET = 300;
+
 // The solar farm staff are working at. Saved with every record, so reports can tell sites apart.
 // Change both lines to move everyone to another site (phones switch over the next time the app opens).
 export const SITE = "manildra";

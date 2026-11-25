@@ -52,7 +52,14 @@ export interface Daily {
 }
 
 /** /reports/repairs: panels fixed or replaced over one day or a range of days */
+export interface PhotoSerial {
+  status: "read" | "unreadable" | "error";
+  serial: string | null;
+}
+
 export interface RepairData {
+  serials?: Record<string, PhotoSerial>; // photo key -> panel serial recorded for it
+  panels_to_date?: number; // every panel replaced at the site up to the report's last day
   date: string;
   date_from: string;
   site: string | null;

@@ -100,6 +100,88 @@ $accent: #b45309;
   }
 }
 
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 18px;
+  padding: 16px 20px;
+  border: 1px solid $rule;
+  border-radius: 6px;
+  break-inside: avoid;
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 520px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.ringPct {
+  fill: $ink;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.ringSub {
+  fill: $muted;
+  font-size: 13px;
+}
+
+.progressText {
+  h3 {
+    margin: 0 0 6px;
+    font-size: 16px;
+  }
+  p {
+    margin: 0 0 10px;
+    font-size: 15px;
+  }
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  color: $ink;
+  font-size: 13px;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  span {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid $rule;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+.serial {
+  margin: 0 0 6px;
+  color: $muted;
+  font-size: 12px;
+
+  strong {
+    color: $ink;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  em {
+    font-style: italic;
+  }
+}
+
 .missing {
   padding: 18px 10px;
   border: 1px dashed $rule;

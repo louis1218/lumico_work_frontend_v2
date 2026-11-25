@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaPrint } from "react-icons/fa";
 import { dateTimeOf, fullName, longDate } from "../../lib/inspection";
-import { FIXED_ENABLED } from "../../lib/features";
+import { FIXED_ENABLED, REPLACE_TARGET } from "../../lib/features";
 import type { RepairData } from "./types";
 import base from "./ClientReport.module.scss";
 import styles from "./RepairReport.module.scss";
@@ -15,10 +15,75 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 type Repair = RepairData["repairs"][number];
 
+/** Ring chart of the job: panels replaced before this report's period, in it, and still to do. */
+function ProgressRing({ earlier, now, target, oneDay }: { earlier: number; now: number; target: number; oneDay: boolean }) {
+  const done = earlier + now;
+  const pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : 0;
+  const size = 168;
+  const stroke = 20;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const gap = done > 0 && done < target ? 2 : 0; // a thin surface gap between the parts
+  const len = (n: number) => (target > 0 ? (Math.min(n, target) / target) * c : 0);
+  const earlierLen = len(earlier);
+  const nowLen = Math.min(len(now), c - earlierLen);
+  const remaining = Math.max(0, target - done);
+  const arc = (length: number, offset: number, color: string) =>
+    length > 0 ? (
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={stroke}
+        strokeDasharray={`${Math.max(0, length - gap)} ${c}`}
+        strokeDashoffset={-offset}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+    ) : null;
+  return (
+    <div className={styles.progress}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${done} of ${target} panels replaced, ${pct} percent`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e8ebf0" strokeWidth={stroke} />
+        {arc(earlierLen, 0, "#475467")}
+        {arc(nowLen, earlierLen, "#f59e0b")}
+        <text x="50%" y="47%" textAnchor="middle" className={styles.ringPct}>
+          {pct}%
+        </text>
+        <text x="50%" y="62%" textAnchor="middle" className={styles.ringSub}>
+          {done} of {target}
+        </text>
+      </svg>
+      <div className={styles.progressText}>
+        <h3>Job progress</h3>
+        <p>
+          <strong>{done}</strong> of {target} panels replaced so far.{" "}
+          {remaining > 0 ? `${remaining} still to replace.` : "All panels in this job have been replaced."}
+        </p>
+        <ul className={styles.legend}>
+          {earlier > 0 && (
+            <li>
+              <span style={{ background: "#475467" }} /> Earlier days: {earlier}
+            </li>
+          )}
+          <li>
+            <span style={{ background: "#f59e0b" }} /> {oneDay ? "This day" : "This period"}: {now}
+          </li>
+          <li>
+            <span style={{ background: "#e8ebf0" }} /> Remaining: {remaining}
+          </li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 /** The repair report as the client receives it: summary, progress by block, technicians, and every panel with before and after photos. */
 export default function RepairReport({ data, onBack }: { data: RepairData; onBack: () => void }) {
   const doc = useRef<HTMLElement>(null);
   const [preparing, setPreparing] = useState(false);
+  const serials = data.serials ?? {}; // panel serials recorded for these photos
 
   const t = data.totals;
   const sitesInReport = [...new Set(data.repairs.map((r) => r.site))];
@@ -56,6 +121,12 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
     return (
       <div className={styles.side}>
         <h4>{label}</h4>
+        {keys.some((k) => serials[k]?.serial) && (
+          <p className={styles.serial}>
+            {which === "before" ? "Old panel serial: " : "New panel serial: "}
+            <strong>{[...new Set(keys.map((k) => serials[k]?.serial).filter(Boolean))].join(", ")}</strong>
+          </p>
+        )}
         {keys.length === 0 ? (
           <p className={styles.missing}>No {label.toLowerCase()} photo</p>
         ) : (
@@ -175,6 +246,14 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
             </li>
           </ul>
           <p className={base.lead}>{lead}</p>
+          {!F && REPLACE_TARGET > 0 && (
+            <ProgressRing
+              earlier={Math.max(0, (data.panels_to_date ?? t.panels) - t.panels)}
+              now={t.panels}
+              target={REPLACE_TARGET}
+              oneDay={oneDay}
+            />
+          )}
         </section>
 
         {data.blocks.length > 0 && (
