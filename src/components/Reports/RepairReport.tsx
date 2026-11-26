@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaPrint } from "react-icons/fa";
 import { dateTimeOf, fullName, longDate } from "../../lib/inspection";
 import { FIXED_ENABLED, REPLACE_TARGET } from "../../lib/features";
+import { shrinkImage } from "../../lib/shrinkImage";
 import type { RepairData } from "./types";
 import base from "./ClientReport.module.scss";
 import styles from "./RepairReport.module.scss";
@@ -85,6 +86,39 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
   const [preparing, setPreparing] = useState(false);
   const serials = data.serials ?? {}; // panel serials recorded for these photos
 
+  // Smaller copies of the photos, so the saved PDF stays a sensible size. Falls back to the originals.
+  const [small, setSmall] = useState<Record<string, string>>({});
+  const [shrink, setShrink] = useState<{ done: number; total: number; failed: number } | null>(null);
+  useEffect(() => {
+    const urls = [...new Set(data.repairs.flatMap((r) => [...r.before_keys, ...r.after_keys]).map((k) => `${data.photo_base}/${k}`))];
+    if (urls.length === 0) return;
+    let cancelled = false;
+    const made: string[] = [];
+    let done = 0;
+    let failed = 0;
+    setShrink({ done, total: urls.length, failed });
+    const queue = [...urls];
+    const worker = async () => {
+      for (let url = queue.shift(); url && !cancelled; url = queue.shift()) {
+        try {
+          const smallUrl = await shrinkImage(url);
+          made.push(smallUrl);
+          if (!cancelled) setSmall((prev) => ({ ...prev, [url]: smallUrl }));
+        } catch {
+          failed += 1; // keep the original photo
+        }
+        done += 1;
+        if (!cancelled) setShrink({ done, total: urls.length, failed });
+      }
+    };
+    void Promise.all(Array.from({ length: 4 }, worker));
+    return () => {
+      cancelled = true;
+      made.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [data.repairs, data.photo_base]);
+  const shrinking = !!shrink && shrink.done < shrink.total;
+
   const t = data.totals;
   const sitesInReport = [...new Set(data.repairs.map((r) => r.site))];
   const siteLabel = data.site ? cap(data.site) : sitesInReport.length ? sitesInReport.map(cap).join(", ") : "All sites";
@@ -133,7 +167,7 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
           <ul className={keys.length > 1 ? styles.many : undefined}>
             {keys.map((k, n) => (
               <li key={k}>
-                <img src={`${data.photo_base}/${k}`} alt={`Block ${r.block}, tracker ${r.tracker}, panel ${r.panel}, ${label.toLowerCase()} photo ${n + 1}`} />
+                <img src={small[`${data.photo_base}/${k}`] ?? `${data.photo_base}/${k}`} alt={`Block ${r.block}, tracker ${r.tracker}, panel ${r.panel}, ${label.toLowerCase()} photo ${n + 1}`} />
               </li>
             ))}
           </ul>
@@ -163,13 +197,15 @@ export default function RepairReport({ data, onBack }: { data: RepairData; onBac
         <p>
           This is the {WORK} report as the client will receive it. Choose <strong>Save as PDF</strong> in the print window.
           {photos ? ` It includes ${plural(photos, "photo", "photos")}.` : ""}
+          {shrinking && ` Making the photos smaller for the PDF: ${shrink!.done} of ${shrink!.total}…`}
+          {!shrinking && shrink && shrink.failed > 0 && ` ${plural(shrink.failed, "photo", "photos")} could not be made smaller, so the PDF will be larger.`}
         </p>
         <div className={styles.actions}>
           <button onClick={onBack} className={styles.secondary}>
             <FaArrowLeft aria-hidden="true" /> Back
           </button>
-          <button onClick={save} disabled={preparing || t.panels === 0}>
-            <FaPrint aria-hidden="true" /> {preparing ? "Preparing photos…" : "Save as PDF"}
+          <button onClick={save} disabled={preparing || shrinking || t.panels === 0}>
+            <FaPrint aria-hidden="true" /> {preparing || shrinking ? "Preparing photos…" : "Save as PDF"}
           </button>
         </div>
       </div>
